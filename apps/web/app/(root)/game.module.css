@@ -1,0 +1,791 @@
+/* Global Layout */
+.container {
+  min-height: 100vh;
+  /* Layered background: dark overlay on top of image */
+  background: 
+    linear-gradient(rgba(15, 5, 24, 0.5), rgba(15, 5, 24, 0.5)),
+    url('/image1.jpg') center/cover no-repeat fixed;
+  display: flex;
+  font-family: var(--font-lilita), 'Courier New', monospace;
+  color: #fff;
+  overflow: hidden;
+  position: relative;
+  /* Custom Gaming Cursor (SVG) */
+  cursor: url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 2L12 28L16 16L28 12L2 2Z' fill='%23a044ff' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 2 2, crosshair;
+}
+
+/* Sidebar Styling */
+.sidebar {
+  width: 180px;
+  /* Transparent glass effect */
+  background: transparent;
+  /* backdrop-filter: blur(10px); */
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0px;
+  /* border-right: 2px solid rgba(160, 68, 255, 0.3); */
+  /* box-shadow: 5px 0 15px rgba(0,0,0,0.3); */
+  z-index: 10;
+  justify-content: center; /* Center player info vertically */
+  align-items: center;
+}
+
+.playerProfile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.avatarBox {
+  width: 80px;
+  height: 80px;
+  background-color: #2d1b4e;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #4a2c7a;
+}
+.avatar {
+  font-size: 3rem;
+}
+
+.playerName {
+  font-size: 1.2rem;
+  color: #fff;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  /* Subtle 3D text effect */
+  text-shadow: 0px 3px 0px #3b1f52, 
+               0px 5px 5px rgba(0,0,0,0.4);
+}
+
+.miniDisc {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-top: 5px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+.p1DiscPreview {
+  /* Yellow Striped Disc Style */
+  background: repeating-linear-gradient(
+    45deg,
+    #ffd700,
+    #ffd700 10px,
+    #ffaa00 10px,
+    #ffaa00 20px
+  );
+  border: 2px solid #cc8800;
+}
+
+.p2DiscPreview {
+  /* Cyan Disc Style */
+  background: radial-gradient(circle at 30% 30%, #00ffff, #008b8b);
+  border: 4px solid #00dad7;
+  box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+}
+
+.vsBadge {
+  background: linear-gradient(180deg, #6a3093, #a044ff);
+  padding: 5px 0;
+  text-align: center;
+  margin: 20px 0;
+  box-shadow: 0px 4px 0px #3b1f52,
+              0px 8px 10px rgba(0,0,0,0.3);
+  position: relative;
+  clip-path: polygon(0% 0%, 100% 0%, 90% 100%, 10% 100%);
+  width: 60%;
+}
+.vsText {
+  font-size: 2.5rem;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #ffffff 0%, #d1d5db 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: #fff;
+  /* 3D Drop Shadow */
+  filter: drop-shadow(0px 3px 0px #4b5563) 
+          drop-shadow(0px 5px 5px rgba(0,0,0,0.5));
+  font-family: var(--font-lilita);
+}
+
+.sidebarFooter {
+  margin-top: auto;
+}
+
+.spectateButton {
+  background: linear-gradient(180deg, #a044ff 0%, #6a3093 100%);
+  color: #fff;
+  border: 2px solid #4a2c7a;
+  padding: 8px;
+  width: 100%;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-transform: uppercase;
+  font-family: inherit;
+  /* 3D Button Effect */
+  box-shadow: 0px 4px 0px #3b1f52,
+              0px 8px 10px rgba(0,0,0,0.3);
+  transition: all 0.1s;
+}
+.spectateButton:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+  box-shadow: 0px 6px 0px #3b1f52,
+              0px 12px 15px rgba(0,0,0,0.3);
+}
+.spectateButton:active {
+  transform: translateY(4px);
+  box-shadow: 0px 0px 0px #3b1f52;
+}
+
+/* Main Area */
+.mainArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  background: transparent; /* Allow main background image to show */
+}
+
+/* Menu Overlay */
+.menuOverlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: rgba(0,0,0,0.6);
+  padding: 40px;
+  border-radius: 20px;
+  backdrop-filter: blur(5px);
+}
+.title {
+  font-family: var(--font-lilita);
+  font-size: 4.5rem;
+  margin-bottom: 25px;
+  background: linear-gradient(180deg, #ffca28 0%, #ff8f00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: #ff8f00;
+  text-transform: uppercase;
+  /* Thick 3D Extrusion Effect */
+  filter: drop-shadow(0px 2px 0px #b04c00)
+          drop-shadow(0px 4px 0px #b04c00)
+          drop-shadow(0px 6px 0px #7a3300)
+          drop-shadow(0px 8px 0px #7a3300)
+          drop-shadow(0px 10px 15px rgba(0,0,0,0.6));
+  letter-spacing: 3px;
+  transform: rotate(-2deg);
+  z-index: 10;
+}
+.input {
+  padding: 15px 25px;
+  font-size: 1.2rem;
+  border-radius: 12px;
+  border: 3px solid #3b1f52;
+  margin-bottom: 25px;
+  text-align: center;
+  background: linear-gradient(180deg, #2d1b4e 0%, #1a0b2e 100%);
+  color: #fff;
+  font-family: inherit;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
+  transition: border-color 0.3s;
+}
+.input:focus {
+  outline: none;
+  border-color: #a044ff;
+  box-shadow: 0 0 15px rgba(160, 68, 255, 0.3),
+              inset 0 2px 5px rgba(0,0,0,0.5);
+}
+.buttonGroup {
+  display: flex;
+  gap: 15px;
+}
+.button {
+  padding: 15px 30px;
+  background: linear-gradient(180deg, #bb77ff 0%, #a044ff 100%);
+  border: none;
+  color: white;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: bold;
+  font-family: inherit;
+  text-transform: uppercase;
+  /* 3D Button Effect */
+  box-shadow: 0px 5px 0px #6a2c91,
+              0px 10px 10px rgba(0,0,0,0.3);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.button:active {
+  transform: translateY(5px);
+  box-shadow: 0px 0px 0px #6a2c91,
+              0px 0px 0px rgba(0,0,0,0.3);
+}
+.buttonSecondary {
+  background: linear-gradient(180deg, #ffca58 0%, #ffaa00 100%);
+  box-shadow: 0px 5px 0px #b37400,
+              0px 10px 10px rgba(0,0,0,0.3);
+  color: #3e2723;
+}
+.buttonSecondary:active {
+  box-shadow: 0px 0px 0px #b37400;
+}
+
+/* Modal System */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2000;
+  backdrop-filter: blur(8px);
+  animation: fadeIn 0.3s ease;
+}
+
+.modalContent {
+  background: #2d1b4e;
+  border: 4px solid #a044ff;
+  border-radius: 20px;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 0 30px rgba(160, 68, 255, 0.4);
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.modalIcon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+  filter: drop-shadow(0 5px 10px rgba(0,0,0,0.5));
+}
+
+.modalTitle {
+  font-size: 2.5rem;
+  background: linear-gradient(180deg, #e0aaff 0%, #a044ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: #a044ff; /* Fallback */
+  text-align: center;
+  margin-bottom: 15px;
+  text-transform: uppercase;
+  /* 3D Drop Shadow for Depth */
+  filter: drop-shadow(0px 4px 0px #5a1a9e) 
+          drop-shadow(0px 6px 10px rgba(0,0,0,0.5));
+  letter-spacing: 1px;
+  transform: rotate(-1deg);
+}
+
+.modalSubtitle {
+  font-size: 0.9rem;
+  color: #ccc;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.modalText {
+  font-size: 1rem;
+  text-align: center;
+  margin-bottom: 30px;
+  line-height: 1.5;
+}
+
+.modalActions {
+  display: flex;
+  gap: 15px;
+  width: 100%;
+}
+
+.modalButton {
+  flex: 1;
+  padding: 15px;
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-weight: bold;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: transform 0.1s;
+  /* Base 3D shadow */
+  box-shadow: 0px 5px 0px rgba(0,0,0,0.3);
+}
+
+.modalButton:active {
+  transform: translateY(4px);
+  box-shadow: 0px 0px 0px rgba(0,0,0,0.0);
+}
+
+.confirmBtn {
+  background: linear-gradient(180deg, #2ecc71 0%, #27ae60 100%);
+  box-shadow: 0px 5px 0px #1e8449, 
+              0px 10px 10px rgba(0,0,0,0.3);
+  color: white;
+}
+.confirmBtn:active {
+  box-shadow: 0px 0px 0px #1e8449;
+}
+
+.cancelBtn {
+  background: linear-gradient(180deg, #9b59b6 0%, #8e44ad 100%);
+  box-shadow: 0px 5px 0px #6c3483, 
+              0px 10px 10px rgba(0,0,0,0.3);
+  color: white;
+}
+.cancelBtn:active {
+  box-shadow: 0px 0px 0px #6c3483;
+}
+
+.closeButton {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 2rem;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.closeButton:hover {
+  opacity: 1;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { transform: scale(0.8); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Game Board */
+.boardWrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Status Banner (Turn Indicator / Game End) */
+.statusBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 15px;
+  padding: 15px 30px;
+  margin-bottom: 15px;
+  background: rgba(45, 27, 78, 0.9);
+  border-radius: 50px;
+  border: 2px solid rgba(160, 68, 255, 0.5);
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
+  min-width: 300px;
+}
+
+.statusIcon {
+  font-size: 1.8rem;
+}
+
+.statusText {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.statusSubtext {
+  font-size: 0.9rem;
+  font-weight: normal;
+  color: #ccc;
+  text-transform: none;
+}
+
+.turnIndicatorDisc {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+}
+
+.playAgainBtn {
+  padding: 10px 20px;
+  background: linear-gradient(180deg, #2ecc71 0%, #27ae60 100%);
+  border: none;
+  border-radius: 25px;
+  color: white;
+  font-weight: bold;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #1e8449;
+  transition: all 0.1s;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+}
+
+.playAgainBtn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #1e8449;
+}
+
+.playAgainBtn:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #1e8449;
+}
+
+.hoverRow {
+  display: flex;
+  width: 100%;
+  height: 80px; /* Space for floating disc */
+  margin-bottom: 5px;
+}
+.hoverCell {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding-bottom: 10px;
+  cursor: pointer;
+}
+
+.floatingDisc {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  animation: float 1s infinite ease-in-out;
+}
+.p1Floating {
+  /* Yellow Striped */
+  background: repeating-linear-gradient(45deg, #ffd700, #ffd700 10px, #ffaa00 10px, #ffaa00 20px);
+  border: 2px solid #cc8800;
+}
+.p2Floating {
+  /* Cyan with Ring */
+  background: radial-gradient(circle at 30% 30%, #00ffff, #008b8b);
+  border: 5px solid #00dad7;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes dropBounce {
+  0% { transform: translateY(-500px); opacity: 0; }
+  60% { transform: translateY(0); opacity: 1; }
+  75% { transform: translateY(-30px); }
+  90% { transform: translateY(0); }
+  95% { transform: translateY(-10px); }
+  100% { transform: translateY(0); }
+}
+
+/* The Wooden Board */
+.board {
+  background-color: #e6c288; /* Wood Color Fallback */
+  /* Realistic smooth wood look */
+  background: linear-gradient(180deg, #f5d7b8 0%, #dcb085 50%, #c9a06e 100%);
+  padding: 20px;
+  border-radius: 16px;
+  /* Thick 3D Board Edge with glow */
+  box-shadow: 
+    inset 0 0 15px rgba(255,255,255,0.4), /* Highlight */
+    0 12px 0 #a07850, /* 3D Side darker wood */
+    0 15px 0 #8a6540, /* Extra depth */
+    0 30px 40px rgba(0,0,0,0.5), /* Drop Shadow */
+    0 0 60px rgba(160, 68, 255, 0.2); /* Purple glow */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 3px solid #f8e0c4;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+}
+
+.cell {
+  position: relative;
+  width: 85px;
+  height: 85px;
+  cursor: pointer;
+}
+
+/* The "Hole" cuts through the board */
+.hole {
+  width: 100%;
+  height: 100%;
+  background-color: rgba(15, 5, 24, 0.85); /* Darker for contrast */
+  border-radius: 50%;
+  /* Deep Inner Shadow for hole depth */
+  box-shadow: inset 0px 8px 15px rgba(0,0,0,0.8),
+              inset 0px -3px 8px rgba(255,255,255,0.1),
+              0 0 3px rgba(0,0,0,0.5); /* Outer edge shadow */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px; /* Space between disc and hole edge */
+}
+
+.disc {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  /* Enhanced 3D shadows */
+  box-shadow: 
+    inset 4px 4px 10px rgba(255,255,255,0.5),
+    inset -4px -4px 10px rgba(0,0,0,0.4),
+    3px 4px 8px rgba(0,0,0,0.4);
+  /* Animation */
+  animation: dropBounce 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.player1 {
+  /* Yellow Striped Texture */
+  background: repeating-linear-gradient(
+    -45deg,
+    #ffd700,
+    #ffd700 8px,
+    #ffaa00 8px,
+    #ffaa00 16px
+  );
+  border: 1px solid #cc8800;
+}
+
+.player2 {
+  /* Cyan with Ring */
+  background: radial-gradient(circle at 30% 30%, #40e0d0, #008b8b);
+  border: 6px solid #00dad7; /* The ring */
+  box-sizing: border-box;
+}
+
+/* Responsive */
+@media (max-width: 800px) {
+  .container {
+    flex-direction: column;
+  }
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    height: 80px;
+    padding: 10px;
+  }
+  .sidebarFooter { display: none; }
+  .vsBadge { display: none; }
+  .playerProfile { flex-direction: row; margin: 0; }
+}
+
+/* Chat Panel */
+.chatPanel {
+  position: fixed;
+  right: 0;
+  top: 0;
+  height: 100vh;
+  width: 350px;
+  /* Transparent glass effect */
+  /* background: rgba(19, 6, 32, 0.7); */
+  backdrop-filter: blur(8px);
+  border-left: 2px solid rgba(160, 68, 255, 0.4);
+  box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}
+
+.chatOpen {
+  transform: translateX(0);
+}
+
+.chatToggle {
+  position: absolute;
+  left: -70px;
+  top: 20px;
+  width: 65px;
+  height: 40px;
+  /* Purple theme matching site */
+  background: linear-gradient(180deg, #a044ff 0%, #6a3093 100%);
+  border: 2px solid #4a2c7a;
+  border-radius: 12px 0 0 12px;
+  border-right: none;
+  color: white;
+  font-size: 0.85rem;
+  font-family: inherit; /* Uses Lilita One */
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: -4px 4px 0px #3b1f52,
+              -4px 8px 10px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.3);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.chatToggle:hover {
+  filter: brightness(1.1);
+  left: -75px;
+  box-shadow: -6px 6px 0px #3b1f52,
+              -6px 12px 15px rgba(0,0,0,0.3);
+}
+
+.chatHeader {
+  padding: 20px;
+  background: linear-gradient(180deg, #a044ff 0%, #6a3093 100%);
+  font-size: 1.2rem;
+  border-bottom: 4px solid #4a2c7a;
+  color: #fff;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-shadow: 0px 2px 0px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+}
+
+.chatMessages {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.chatMessage {
+  margin-bottom: 12px;
+  padding: 8px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 5px;
+  word-wrap: break-word;
+}
+
+.chatMessage strong {
+  color: #ffaa00;
+  margin-right: 5px;
+}
+
+.chatInput {
+  display: flex;
+  padding: 15px;
+  gap: 10px;
+  border-top: 1px solid #3b1f52;
+}
+
+.chatInput input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #3b1f52;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  border-radius: 5px;
+  font-size: 0.7rem;
+  font-family: inherit;
+}
+
+.chatInput button {
+  padding: 10px 15px;
+  background: #a044ff;
+  border: none;
+  color: white;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: bold;
+  transition: all 0.2s;
+}
+
+.chatInput button:hover {
+  background: #b055ff;
+  transform: scale(1.05);
+}
+
+/* Music Toggle Button */
+.musicToggle {
+  position: fixed;
+  bottom: 30px; 
+  right: 30px; 
+  width: 50px;
+  height: 50px;
+  background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: white;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: all 0.1s;
+  /* 3D Circle Button */
+  box-shadow: 0px 4px 0px #2a0b52,
+              0px 5px 10px rgba(0,0,0,0.4);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.musicToggle:hover {
+  transform: translateY(-2px);
+  box-shadow: 0px 6px 0px #2a0b52,
+              0px 12px 20px rgba(0,0,0,0.4);
+}
+
+.musicToggle:active {
+  transform: translateY(4px);
+  box-shadow: 0px 0px 0px #2a0b52;
+}
+
+/* Responsive Updates */
+@media (max-width: 800px) {
+  .chatPanel {
+    width: 100%;
+    height: 60vh;
+    top: auto;
+    bottom: 0;
+    transform: translateY(100%);
+    border-left: none;
+    border-top: 3px solid #a044ff;
+  }
+  
+  .chatToggle {
+    left: 50%;
+    top: -50px;
+    transform: translateX(-50%);
+    border-radius: 8px 8px 0 0;
+  }
+  
+  .chatToggle:hover {
+    transform: translateX(-50%) scale(1.1);
+  }
+  
+  .musicToggle {
+    bottom: 15px;
+    right: 15px;
+    width: 50px;
+    height: 50px;
+    font-size: 1.5rem;
+  }
+}
