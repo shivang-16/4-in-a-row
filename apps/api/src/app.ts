@@ -9,7 +9,8 @@ const app: Application = express();
 
 // Middleware
 app.use(cors({
-  origin: ['https://4-in-a-row-web-kappa.vercel.app', 'http://localhost:3000']
+  origin: ['https://4-in-a-row-web-kappa.vercel.app', 'http://localhost:3000'],
+  credentials: true,
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

@@ -11,11 +11,20 @@ export class WebSocketService {
   private connectedPlayers: Map<string, Socket> = new Map();
 
   constructor(httpServer: HTTPServer) {
+    // Define allowed origins
+    const allowedOrigins = [
+      'https://4-in-a-row-web-kappa.vercel.app',
+      'http://localhost:3000',
+      process.env.FRONTEND_URL,
+    ].filter(Boolean) as string[];
+
     this.io = new SocketIOServer(httpServer, {
       cors: {
-        origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+        origin: allowedOrigins,
         methods: ['GET', 'POST'],
+        credentials: true,
       },
+      transports: ['websocket', 'polling'],
     });
 
     this.setupEventHandlers();
