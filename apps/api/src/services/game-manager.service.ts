@@ -8,11 +8,8 @@ import { kafkaService, GameEventType } from './kafka.service';
 
 export class GameManager {
   private activeGames: Map<string, GameState> = new Map();
-  private playerToGame: Map<string, string> = new Map(); // username -> gameId
+  private playerToGame: Map<string, string> = new Map();
 
-  /**
-   * Create a new game between two players
-   */
   createGame(player1Username: string, player2Username: string, isBot: boolean = false): GameState {
     const gameId = uuidv4();
     
@@ -51,12 +48,10 @@ export class GameManager {
 
     console.log(`🎮 Game created: ${gameId} - ${player1Username} vs ${player2Username}${isBot ? ' (BOT)' : ''}`);
 
-    // Emit game start via WebSocket
     if (wsService) {
       wsService.emitGameStart(gameId, player1Username, player2Username, isBot);
     }
 
-    // Send Kafka event
     kafkaService.sendGameEvent(GameEventType.GAME_STARTED, {
       gameId,
       player1: player1Username,
@@ -67,9 +62,6 @@ export class GameManager {
     return gameState;
   }
 
-  /**
-   * Make a move in a game
-   */
   makeMove(gameId: string, username: string, column: number): MoveResult {
     const game = this.activeGames.get(gameId);
     if (!game) {
@@ -80,7 +72,6 @@ export class GameManager {
       return { success: false, error: 'Game is not in progress' };
     }
 
-    // Check if it's the player's turn
     const isPlayer1 = game.player1.username === username;
     const isPlayer2 = game.player2.username === username;
     
@@ -93,14 +84,12 @@ export class GameManager {
       return { success: false, error: 'Not your turn' };
     }
 
-    // Make the move
     const result = GameLogic.makeMove(game.board, column, game.currentTurn);
     
     if (!result.success) {
       return result;
     }
 
-    // Record the move
     const move: Move = {
       player: username,
       column,
@@ -109,7 +98,6 @@ export class GameManager {
     };
     game.moves.push(move);
 
-    // Send Kafka event
     kafkaService.sendGameEvent(GameEventType.MOVE_MADE, {
       gameId,
       player: username,
@@ -118,22 +106,18 @@ export class GameManager {
       moveNumber: game.moves.length,
     });
 
-    // Check for game end
     if (result.winner || result.isDraw) {
       game.status = GameStatus.COMPLETED;
       game.winner = result.winner === 'player1' ? game.player1.username : result.winner === 'player2' ? game.player2.username : null;
       game.winReason = result.winReason!;
       game.endedAt = new Date();
 
-      // Emit game end
       if (wsService) {
         wsService.emitGameEnd(gameId, game.winner, result.winReason!, result.winningCells);
       }
 
-      // Save to database
       this.saveGameToDatabase(game);
 
-      // Send Kafka event
       kafkaService.sendGameEvent(GameEventType.GAME_ENDED, {
         gameId,
         winner: game.winner,
@@ -142,7 +126,6 @@ export class GameManager {
         totalMoves: game.moves.length,
       });
 
-      // Clean up
       this.activeGames.delete(gameId);
       this.playerToGame.delete(game.player1.username);
       if (!game.player2.isBot) {
@@ -151,16 +134,13 @@ export class GameManager {
       
       console.log(`🧹 Cleaned up game ${gameId} from active games`);
     } else {
-      // Switch turns
       game.currentTurn = game.currentTurn === CellValue.PLAYER1 ? CellValue.PLAYER2 : CellValue.PLAYER1;
 
-      // If next player is bot, make bot move
       if (game.currentTurn === CellValue.PLAYER2 && game.player2.isBot) {
         setTimeout(() => this.makeBotMove(gameId), 1000);
       }
     }
 
-    // Emit game update
     if (wsService) {
       wsService.emitGameUpdate(gameId, {
         board: game.board,
@@ -173,9 +153,6 @@ export class GameManager {
     return result;
   }
 
-  /**
-   * Make a bot move
-   */
   private makeBotMove(gameId: string) {
     const game = this.activeGames.get(gameId);
     if (!game || game.status !== GameStatus.IN_PROGRESS) return;
@@ -192,16 +169,12 @@ export class GameManager {
     return this.activeGames.get(gameId);
   }
 
-  /**
-   * Get game by player username (with auto-cleanup of stale mappings)
-   */
   getGameByPlayer(username: string): GameState | undefined {
     const gameId = this.playerToGame.get(username);
     if (!gameId) return undefined;
     
     const game = this.activeGames.get(gameId);
     
-    // If game doesn't exist, clean up the stale mapping
     if (!game) {
       console.log(`🧹 Cleaning up stale player mapping for ${username} (game ${gameId} no longer exists)`);
       this.playerToGame.delete(username);
@@ -211,9 +184,6 @@ export class GameManager {
     return game;
   }
 
-  /**
-   * Clear player's game mapping (useful when player disconnects or leaves)
-   */
   clearPlayerMapping(username: string): void {
     if (this.playerToGame.has(username)) {
       console.log(`🧹 Cleared player mapping for ${username}`);
@@ -221,9 +191,6 @@ export class GameManager {
     }
   }
 
-  /**
-   * Save game to database
-   */
   private async saveGameToDatabase(game: GameState) {
     try {
       await Game.create({
@@ -251,13 +218,9 @@ export class GameManager {
     }
   }
 
-  /**
-   * Get all active games
-   */
   getActiveGames(): GameState[] {
     return Array.from(this.activeGames.values());
   }
 }
 
-// Export singleton instance
 export const gameManager = new GameManager();

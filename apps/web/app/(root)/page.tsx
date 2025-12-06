@@ -52,27 +52,6 @@ export default function Home() {
   useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
   useEffect(() => { usernameRef.current = username; }, [username]);
   
-  // Keep-alive ping to prevent Render server from sleeping (hits /health every 20 seconds)
-  useEffect(() => {
-    const pingServer = async () => {
-      try {
-        await fetch(`${API_URL}/health`);
-        console.log('🏥 Health check ping sent');
-      } catch (error) {
-        console.log('⚠️ Health check failed:', error);
-      }
-    };
-    
-    // Initial ping
-    pingServer();
-    
-    // Set up interval to ping every 20 seconds
-    const intervalId = setInterval(pingServer, 20000);
-    
-    // Cleanup on unmount
-    return () => clearInterval(intervalId);
-  }, []);
-  
   // Modal states
   const [showSpectateModal, setShowSpectateModal] = useState(false);
   const [showFriendModal, setShowFriendModal] = useState(false);

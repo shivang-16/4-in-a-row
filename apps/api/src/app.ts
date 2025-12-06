@@ -17,6 +17,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {
+  console.log('Health check ping received');
   res.status(200).json({
     status: 'ok',
     timestamp: new Date().toISOString(),
