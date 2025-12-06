@@ -319,7 +319,7 @@ export class WebSocketService {
 
   // Emit game update to all players in the game
   public emitGameUpdate(gameId: string, data: any) {
-    console.log(`📤 Broadcasting game update to room ${gameId}:`, data);
+    // console.log(`📤 Broadcasting game update to room ${gameId}:`, data);
     this.io.to(gameId).emit('game:update', data);
   }
 
