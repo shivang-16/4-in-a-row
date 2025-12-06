@@ -127,7 +127,7 @@ export class GameManager {
 
       // Emit game end
       if (wsService) {
-        wsService.emitGameEnd(gameId, game.winner, result.winReason!);
+        wsService.emitGameEnd(gameId, game.winner, result.winReason!, result.winningCells);
       }
 
       // Save to database

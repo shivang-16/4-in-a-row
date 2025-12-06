@@ -64,6 +64,7 @@ export interface MoveResult {
   row?: number;
   winner?: string;
   winReason?: WinReason;
+  winningCells?: Position[];
   isDraw?: boolean;
   error?: string;
 }

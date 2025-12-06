@@ -40,29 +40,34 @@ export class GameLogic {
 
   /**
    * Check if a move results in a win
+   * Returns win reason and the winning cells for highlighting
    */
-  static checkWin(board: Board, row: number, col: number): WinReason | null {
+  static checkWin(board: Board, row: number, col: number): { winReason: WinReason; winningCells: Position[] } | null {
     const player = board[row][col];
     if (player === CellValue.EMPTY) return null;
 
     // Check horizontal
-    if (this.checkDirection(board, row, col, 0, 1, player)) {
-      return WinReason.HORIZONTAL;
+    const horizontalCells = this.getWinningCells(board, row, col, 0, 1, player);
+    if (horizontalCells) {
+      return { winReason: WinReason.HORIZONTAL, winningCells: horizontalCells };
     }
 
     // Check vertical
-    if (this.checkDirection(board, row, col, 1, 0, player)) {
-      return WinReason.VERTICAL;
+    const verticalCells = this.getWinningCells(board, row, col, 1, 0, player);
+    if (verticalCells) {
+      return { winReason: WinReason.VERTICAL, winningCells: verticalCells };
     }
 
     // Check diagonal (bottom-left to top-right)
-    if (this.checkDirection(board, row, col, -1, 1, player)) {
-      return WinReason.DIAGONAL;
+    const diagonal1Cells = this.getWinningCells(board, row, col, -1, 1, player);
+    if (diagonal1Cells) {
+      return { winReason: WinReason.DIAGONAL, winningCells: diagonal1Cells };
     }
 
     // Check diagonal (top-left to bottom-right)
-    if (this.checkDirection(board, row, col, 1, 1, player)) {
-      return WinReason.DIAGONAL;
+    const diagonal2Cells = this.getWinningCells(board, row, col, 1, 1, player);
+    if (diagonal2Cells) {
+      return { winReason: WinReason.DIAGONAL, winningCells: diagonal2Cells };
     }
 
     return null;
@@ -126,6 +131,54 @@ export class GameLogic {
   }
 
   /**
+   * Get winning cells in a specific direction if there's a win
+   * Returns array of 4+ cells or null if no win
+   */
+  private static getWinningCells(
+    board: Board,
+    row: number,
+    col: number,
+    rowDir: number,
+    colDir: number,
+    player: CellValue
+  ): Position[] | null {
+    const cells: Position[] = [{ row, col }];
+    
+    // Collect cells in positive direction
+    let r = row + rowDir;
+    let c = col + colDir;
+    while (
+      r >= 0 && r < ROWS &&
+      c >= 0 && c < COLS &&
+      board[r][c] === player
+    ) {
+      cells.push({ row: r, col: c });
+      r += rowDir;
+      c += colDir;
+    }
+    
+    // Collect cells in negative direction
+    r = row - rowDir;
+    c = col - colDir;
+    while (
+      r >= 0 && r < ROWS &&
+      c >= 0 && c < COLS &&
+      board[r][c] === player
+    ) {
+      cells.push({ row: r, col: c });
+      r -= rowDir;
+      c -= colDir;
+    }
+    
+    if (cells.length >= 4) {
+      console.log(`🏆 Winning cells found: ${cells.length} cells in direction (${rowDir},${colDir})`);
+      return cells;
+    }
+    
+    return null;
+  }
+
+  /**
    * Check if the board is full (draw condition)
    */
   static isBoardFull(board: Board): boolean {
@@ -177,12 +230,13 @@ export class GameLogic {
     }
 
     // Check for win
-    const winReason = this.checkWin(board, row, column);
-    if (winReason) {
+    const winResult = this.checkWin(board, row, column);
+    if (winResult) {
       return {
         success: true,
         row,
-        winReason,
+        winReason: winResult.winReason,
+        winningCells: winResult.winningCells,
         winner: player === CellValue.PLAYER1 ? 'player1' : 'player2',
       };
     }

@@ -61,6 +61,13 @@ export default function Home() {
   const [friendRoomCode, setFriendRoomCode] = useState('');
   const [roomError, setRoomError] = useState<string | null>(null);
   const [isWaitingInRoom, setIsWaitingInRoom] = useState(false);
+  const [codeCopied, setCodeCopied] = useState(false);
+  
+  // UI feedback states
+  const [usernameShake, setUsernameShake] = useState(false);
+  
+  // Winning cells state
+  const [winningCells, setWinningCells] = useState<Array<{row: number, col: number}>>([]);
 
   useEffect(() => {
     const newSocket = io(API_URL);
@@ -119,6 +126,11 @@ export default function Home() {
       setGameStatus('ended');
       setWinner(data.winner);
       setWinReason(data.reason);
+      
+      // Set winning cells for highlighting
+      if (data.winningCells) {
+        setWinningCells(data.winningCells);
+      }
       
       // Play game end sound
       if (gameEndSoundRef.current) {
@@ -204,7 +216,12 @@ export default function Home() {
   };
 
   const handleJoinPvP = () => {
-    if (!username.trim() || !socket) return;
+    if (!username.trim()) {
+      setUsernameShake(true);
+      setTimeout(() => setUsernameShake(false), 500);
+      return;
+    }
+    if (!socket) return;
     
     setGameMode('pvp');
     setGameStatus('waiting');
@@ -213,7 +230,12 @@ export default function Home() {
   };
 
   const handleJoinBot = () => {
-    if (!username.trim() || !socket) return;
+    if (!username.trim()) {
+      setUsernameShake(true);
+      setTimeout(() => setUsernameShake(false), 500);
+      return;
+    }
+    if (!socket) return;
     
     setGameMode('bot');
     setGameStatus('waiting');
@@ -224,7 +246,8 @@ export default function Home() {
   // Play with Friend handlers
   const handlePlayWithFriend = () => {
     if (!username.trim()) {
-      alert('Please enter a username first!');
+      setUsernameShake(true);
+      setTimeout(() => setUsernameShake(false), 500);
       return;
     }
     setShowFriendModal(true);
@@ -298,6 +321,7 @@ export default function Home() {
     setMoveCount(0);
     setChatMessages([]);
     setUnreadCount(0);
+    setWinningCells([]);
   };
   
   const handleSendChat = () => {
@@ -377,7 +401,7 @@ export default function Home() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter Username"
-              className={styles.input}
+              className={`${styles.input} ${usernameShake ? styles.inputShake : ''}`}
             />
              <div className={styles.buttonGroup}>
               <button onClick={handleJoinPvP} className={styles.button}>Find Player</button>
@@ -445,21 +469,26 @@ export default function Home() {
                <div className={styles.board}>
                  {board.map((row, rowIndex) => (
                    <div key={rowIndex} className={styles.row}>
-                     {row.map((cell, colIndex) => (
-                       <div
-                         key={colIndex}
-                         className={styles.cell}
-                         onMouseEnter={() => handleMouseEnter(colIndex)}
-                         onClick={() => handleColumnClick(colIndex)}
-                       >
-                         {/* The "Hole" visual */}
-                         <div className={styles.hole}>
-                            {cell !== 0 && (
-                              <div className={`${styles.disc} ${cell === 1 ? styles.player1 : styles.player2}`}></div>
-                            )}
-                         </div>
-                       </div>
-                     ))}
+                     {row.map((cell, colIndex) => {
+                       const isWinningCell = winningCells.some(
+                         wc => wc.row === rowIndex && wc.col === colIndex
+                       );
+                       return (
+                        <div
+                          key={colIndex}
+                          className={styles.cell}
+                          onMouseEnter={() => handleMouseEnter(colIndex)}
+                          onClick={() => handleColumnClick(colIndex)}
+                        >
+                          {/* The "Hole" visual */}
+                          <div className={styles.hole}>
+                             {cell !== 0 && (
+                               <div className={`${styles.disc} ${cell === 1 ? styles.player1 : styles.player2} ${isWinningCell ? styles.winningDisc : ''}`}></div>
+                             )}
+                          </div>
+                        </div>
+                       );
+                     })}
                    </div>
                  ))}
                </div>
@@ -591,10 +620,11 @@ export default function Home() {
                       className={styles.copyButton}
                       onClick={() => {
                         navigator.clipboard.writeText(myRoomCode || '');
-                        alert('Room code copied!');
+                        setCodeCopied(true);
+                        setTimeout(() => setCodeCopied(false), 2000);
                       }}
                     >
-                      📋 Copy
+                      {codeCopied ? '✓ Copied!' : '📋 Copy'}
                     </button>
                   </div>
                   <p className={styles.waitingText}>⏳ Waiting for friend to join...</p>

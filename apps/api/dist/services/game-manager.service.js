@@ -109,7 +109,7 @@ class GameManager {
             game.endedAt = new Date();
             // Emit game end
             if (websocket_service_1.wsService) {
-                websocket_service_1.wsService.emitGameEnd(gameId, game.winner, result.winReason);
+                websocket_service_1.wsService.emitGameEnd(gameId, game.winner, result.winReason, result.winningCells);
             }
             // Save to database
             this.saveGameToDatabase(game);

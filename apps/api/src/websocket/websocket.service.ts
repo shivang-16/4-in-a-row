@@ -4,7 +4,7 @@ import { kafkaService } from '../services/kafka.service';
 import { GameEventType } from '../types/events';
 import { matchmakingService } from '../services/matchmaking.service';
 import { gameManager } from '../services/game-manager.service';
-import { WinReason, GameStatus } from '../types/game';
+import { WinReason, GameStatus, Position } from '../types/game';
 
 export class WebSocketService {
   private io: SocketIOServer;
@@ -324,11 +324,12 @@ export class WebSocketService {
   }
 
   // Emit game end event
-  public emitGameEnd(gameId: string, winner: string | null, reason: string) {
+  public emitGameEnd(gameId: string, winner: string | null, reason: string, winningCells?: Position[]) {
     this.io.to(gameId).emit('game:ended', {
       gameId,
       winner,
       reason,
+      winningCells,
       timestamp: new Date().toISOString(),
     });
 

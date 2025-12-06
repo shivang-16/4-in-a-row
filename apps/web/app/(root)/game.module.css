@@ -210,6 +210,19 @@
   box-shadow: 0 0 15px rgba(160, 68, 255, 0.3),
               inset 0 2px 5px rgba(0,0,0,0.5);
 }
+
+.inputShake {
+  animation: shake 0.5s ease;
+  border-color: #ff4444 !important;
+  box-shadow: 0 0 15px rgba(255, 68, 68, 0.5),
+              inset 0 2px 5px rgba(0,0,0,0.5) !important;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-8px); }
+  20%, 40%, 60%, 80% { transform: translateX(8px); }
+}
 .buttonGroup {
   display: flex;
   gap: 15px;
@@ -718,20 +731,505 @@
   box-sizing: border-box;
 }
 
+/* Winning Disc Highlight */
+.winningDisc {
+  animation: winPulse 0.8s ease-in-out infinite;
+  box-shadow: 
+    inset 4px 4px 10px rgba(255,255,255,0.5),
+    inset -4px -4px 10px rgba(0,0,0,0.4),
+    0 0 20px rgba(255, 215, 0, 0.8),
+    0 0 40px rgba(255, 215, 0, 0.5),
+    0 0 60px rgba(255, 215, 0, 0.3) !important;
+  z-index: 10;
+  position: relative;
+}
+
+@keyframes winPulse {
+  0%, 100% { 
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% { 
+    transform: scale(1.1);
+    filter: brightness(1.3);
+  }
+}
+
 /* Responsive */
+
+/* Tablets (up to 1024px) */
+@media (max-width: 1024px) {
+  .sidebar {
+    width: 150px;
+    padding: 8px 0;
+  }
+  
+  .avatarBox {
+    width: 60px;
+    height: 60px;
+  }
+  
+  .avatar {
+    font-size: 2rem;
+  }
+  
+  .playerName {
+    font-size: 1rem;
+  }
+  
+  .vsBadge {
+    margin: 15px 0;
+  }
+  
+  .vsText {
+    font-size: 2rem;
+  }
+  
+  .cell {
+    width: 70px;
+    height: 70px;
+  }
+  
+  .floatingDisc {
+    width: 50px;
+    height: 50px;
+  }
+  
+  .hoverRow {
+    height: 60px;
+  }
+  
+  .board {
+    padding: 15px;
+    gap: 8px;
+  }
+  
+  .row {
+    gap: 8px;
+  }
+  
+  .title {
+    font-size: 3.5rem;
+  }
+  
+  .modalContent {
+    max-width: 350px;
+    padding: 30px;
+  }
+}
+
+/* Small Tablets and Large Phones (up to 800px) */
 @media (max-width: 800px) {
   .container {
     flex-direction: column;
   }
+  
   .sidebar {
     width: 100%;
     flex-direction: row;
-    height: 80px;
+    height: auto;
+    min-height: 70px;
+    padding: 10px 15px;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  
+  .sidebarFooter { 
+    display: none; 
+  }
+  
+  .vsBadge { 
+    display: none; 
+  }
+  
+  .playerProfile { 
+    flex-direction: row; 
+    margin: 0;
+    gap: 8px;
+    align-items: center;
+  }
+  
+  .avatarBox {
+    width: 45px;
+    height: 45px;
+  }
+  
+  .avatar {
+    font-size: 1.5rem;
+  }
+  
+  .miniDisc {
+    width: 30px;
+    height: 30px;
+  }
+  
+  .playerName {
+    font-size: 0.85rem;
+    max-width: 100px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .mainArea {
     padding: 10px;
   }
-  .sidebarFooter { display: none; }
-  .vsBadge { display: none; }
-  .playerProfile { flex-direction: row; margin: 0; }
+  
+  .cell {
+    width: 55px;
+    height: 55px;
+  }
+  
+  .floatingDisc {
+    width: 40px;
+    height: 40px;
+  }
+  
+  .hoverRow {
+    height: 50px;
+  }
+  
+  .board {
+    padding: 12px;
+    gap: 6px;
+  }
+  
+  .row {
+    gap: 6px;
+  }
+  
+  .statusBanner {
+    padding: 10px 15px;
+    min-width: auto;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  
+  .statusIcon {
+    font-size: 1.4rem;
+  }
+  
+  .statusText {
+    font-size: 1rem;
+  }
+  
+  .turnIndicatorDisc {
+    width: 25px;
+    height: 25px;
+  }
+  
+  .playAgainBtn {
+    padding: 8px 15px;
+    font-size: 0.75rem;
+  }
+  
+  .title {
+    font-size: 2.5rem;
+    margin-bottom: 15px;
+  }
+  
+  .input {
+    padding: 12px 20px;
+    font-size: 1rem;
+    width: 80%;
+    max-width: 280px;
+  }
+  
+  .buttonGroup {
+    flex-direction: column;
+    gap: 10px;
+    width: 80%;
+    max-width: 280px;
+  }
+  
+  .button {
+    padding: 12px 25px;
+    font-size: 0.9rem;
+    width: 100%;
+  }
+  
+  .buttonFriend {
+    max-width: 280px;
+  }
+  
+  .menuOverlay {
+    padding: 25px;
+    width: 90%;
+    max-width: 350px;
+  }
+  
+  .modalOverlay {
+    padding: 15px;
+  }
+  
+  .modalContent {
+    max-width: 90%;
+    padding: 25px 20px;
+  }
+  
+  .modalIcon {
+    font-size: 3rem;
+    margin-bottom: 15px;
+  }
+  
+  .modalTitle {
+    font-size: 1.8rem;
+  }
+  
+  .friendSection {
+    gap: 10px;
+  }
+  
+  .roomCodeInput {
+    width: 150px;
+    font-size: 1.2rem;
+    letter-spacing: 6px;
+    padding: 12px 15px;
+  }
+  
+  .roomCodeDisplay {
+    flex-direction: column;
+    gap: 12px;
+    padding: 15px 20px;
+  }
+  
+  .roomCode {
+    font-size: 1.6rem;
+    letter-spacing: 6px;
+  }
+}
+
+/* Phones (up to 480px) */
+@media (max-width: 480px) {
+  .container {
+    min-height: 100dvh; /* Use dynamic viewport height for mobile */
+  }
+  
+  .sidebar {
+    padding: 8px 10px;
+    min-height: 60px;
+  }
+  
+  .avatarBox {
+    width: 35px;
+    height: 35px;
+  }
+  
+  .avatar {
+    font-size: 1.2rem;
+  }
+  
+  .miniDisc {
+    width: 22px;
+    height: 22px;
+  }
+  
+  .playerName {
+    font-size: 0.7rem;
+    max-width: 70px;
+  }
+  
+  .playerProfile {
+    gap: 5px;
+  }
+  
+  .mainArea {
+    padding: 5px;
+  }
+  
+  .cell {
+    width: 42px;
+    height: 42px;
+  }
+  
+  .disc {
+    box-shadow: 
+      inset 2px 2px 5px rgba(255,255,255,0.5),
+      inset -2px -2px 5px rgba(0,0,0,0.4),
+      2px 2px 4px rgba(0,0,0,0.4);
+  }
+  
+  .floatingDisc {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .hoverRow {
+    height: 40px;
+    margin-bottom: 3px;
+  }
+  
+  .board {
+    padding: 8px;
+    gap: 4px;
+    border-radius: 12px;
+    box-shadow: 
+      inset 0 0 10px rgba(255,255,255,0.3),
+      0 8px 0 #a07850,
+      0 10px 0 #8a6540,
+      0 20px 25px rgba(0,0,0,0.5);
+  }
+  
+  .row {
+    gap: 4px;
+  }
+  
+  .hole {
+    padding: 4px;
+  }
+  
+  .statusBanner {
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    border-radius: 30px;
+  }
+  
+  .statusIcon {
+    font-size: 1.2rem;
+  }
+  
+  .statusText {
+    font-size: 0.85rem;
+  }
+  
+  .statusSubtext {
+    font-size: 0.7rem;
+  }
+  
+  .turnIndicatorDisc {
+    width: 20px;
+    height: 20px;
+  }
+  
+  .playAgainBtn {
+    padding: 6px 12px;
+    font-size: 0.7rem;
+  }
+  
+  .title {
+    font-size: 2rem;
+    margin-bottom: 15px;
+    letter-spacing: 2px;
+    filter: drop-shadow(0px 2px 0px #b04c00)
+            drop-shadow(0px 3px 0px #7a3300)
+            drop-shadow(0px 5px 10px rgba(0,0,0,0.6));
+  }
+  
+  .menuOverlay {
+    padding: 20px 15px;
+    width: 95%;
+    border-radius: 15px;
+  }
+  
+  .input {
+    padding: 10px 15px;
+    font-size: 0.9rem;
+    width: 100%;
+    max-width: 250px;
+  }
+  
+  .buttonGroup {
+    width: 100%;
+    max-width: 250px;
+  }
+  
+  .button {
+    padding: 10px 20px;
+    font-size: 0.8rem;
+    box-shadow: 0px 4px 0px #6a2c91,
+                0px 6px 8px rgba(0,0,0,0.3);
+  }
+  
+  .buttonFriend {
+    max-width: 250px;
+    margin-top: 12px;
+  }
+  
+  .modalContent {
+    padding: 20px 15px;
+    border-radius: 15px;
+  }
+  
+  .modalIcon {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+  }
+  
+  .modalTitle {
+    font-size: 1.5rem;
+    margin-bottom: 10px;
+  }
+  
+  .modalSubtitle {
+    font-size: 0.8rem;
+    margin-bottom: 20px;
+  }
+  
+  .modalText {
+    font-size: 0.9rem;
+  }
+  
+  .modalActions {
+    gap: 10px;
+  }
+  
+  .modalButton {
+    padding: 12px;
+    font-size: 0.8rem;
+  }
+  
+  .closeButton {
+    font-size: 1.5rem;
+    top: 10px;
+    right: 10px;
+  }
+  
+  .friendSectionTitle {
+    font-size: 0.85rem;
+  }
+  
+  .friendDivider {
+    margin: 12px 0;
+  }
+  
+  .friendDivider span {
+    font-size: 0.8rem;
+  }
+  
+  .roomCodeInput {
+    width: 130px;
+    font-size: 1rem;
+    letter-spacing: 5px;
+    padding: 10px 12px;
+  }
+  
+  .roomCodeDisplay {
+    padding: 12px 15px;
+  }
+  
+  .roomCode {
+    font-size: 1.4rem;
+    letter-spacing: 5px;
+  }
+  
+  .copyButton {
+    padding: 8px 12px;
+    font-size: 0.75rem;
+  }
+  
+  .waitingText {
+    font-size: 0.85rem;
+  }
+  
+  .roomError {
+    padding: 8px 15px;
+    font-size: 0.85rem;
+  }
+  
+  /* Modal Waiting Overlay adjustments */
+  .modalOverlay .modalContent {
+    max-width: 95%;
+  }
 }
 
 /* Chat Panel */
@@ -917,7 +1415,7 @@
   box-shadow: 0px 0px 0px #2a0b52;
 }
 
-/* Responsive Updates */
+/* Responsive Updates for Chat and Music */
 @media (max-width: 800px) {
   .chatPanel {
     width: 100%;
@@ -929,22 +1427,111 @@
     border-top: 3px solid #a044ff;
   }
   
+  .chatOpen {
+    transform: translateY(0);
+  }
+  
   .chatToggle {
     left: 50%;
     top: -50px;
     transform: translateX(-50%);
     border-radius: 8px 8px 0 0;
+    width: 80px;
+    height: 45px;
   }
   
   .chatToggle:hover {
-    transform: translateX(-50%) scale(1.1);
+    transform: translateX(-50%) scale(1.05);
+    left: 50%;
   }
   
   .musicToggle {
     bottom: 15px;
     right: 15px;
-    width: 50px;
-    height: 50px;
-    font-size: 1.5rem;
+    width: 45px;
+    height: 45px;
+    font-size: 1.3rem;
+  }
+  
+  .chatHeader {
+    padding: 15px;
+    font-size: 1rem;
+  }
+  
+  .chatMessages {
+    padding: 12px;
+  }
+  
+  .chatMessage {
+    padding: 6px;
+    font-size: 0.9rem;
+  }
+  
+  .chatInput {
+    padding: 10px;
+    gap: 8px;
+  }
+  
+  .chatInput input {
+    padding: 8px;
+    font-size: 0.85rem;
+  }
+  
+  .chatInput button {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .chatPanel {
+    height: 55vh;
+  }
+  
+  .chatToggle {
+    top: -45px;
+    width: 70px;
+    height: 40px;
+    font-size: 0.75rem;
+  }
+  
+  .unreadBadge {
+    top: -6px;
+    left: -6px;
+    min-width: 18px;
+    height: 18px;
+    font-size: 0.6rem;
+  }
+  
+  .musicToggle {
+    bottom: 10px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+  }
+  
+  .chatHeader {
+    padding: 12px;
+    font-size: 0.9rem;
+  }
+  
+  .chatMessage {
+    margin-bottom: 8px;
+    font-size: 0.85rem;
+  }
+  
+  .chatInput {
+    padding: 8px;
+  }
+  
+  .chatInput input {
+    padding: 8px;
+    font-size: 0.8rem;
+  }
+  
+  .chatInput button {
+    padding: 8px 10px;
+    font-size: 0.75rem;
   }
 }

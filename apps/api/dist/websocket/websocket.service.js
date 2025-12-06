@@ -269,11 +269,12 @@ class WebSocketService {
         this.io.to(gameId).emit('game:update', data);
     }
     // Emit game end event
-    emitGameEnd(gameId, winner, reason) {
+    emitGameEnd(gameId, winner, reason, winningCells) {
         this.io.to(gameId).emit('game:ended', {
             gameId,
             winner,
             reason,
+            winningCells,
             timestamp: new Date().toISOString(),
         });
         // Send Kafka event

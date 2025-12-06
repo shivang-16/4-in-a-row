@@ -30,26 +30,31 @@ class GameLogic {
     }
     /**
      * Check if a move results in a win
+     * Returns win reason and the winning cells for highlighting
      */
     static checkWin(board, row, col) {
         const player = board[row][col];
         if (player === game_1.CellValue.EMPTY)
             return null;
         // Check horizontal
-        if (this.checkDirection(board, row, col, 0, 1, player)) {
-            return game_1.WinReason.HORIZONTAL;
+        const horizontalCells = this.getWinningCells(board, row, col, 0, 1, player);
+        if (horizontalCells) {
+            return { winReason: game_1.WinReason.HORIZONTAL, winningCells: horizontalCells };
         }
         // Check vertical
-        if (this.checkDirection(board, row, col, 1, 0, player)) {
-            return game_1.WinReason.VERTICAL;
+        const verticalCells = this.getWinningCells(board, row, col, 1, 0, player);
+        if (verticalCells) {
+            return { winReason: game_1.WinReason.VERTICAL, winningCells: verticalCells };
         }
         // Check diagonal (bottom-left to top-right)
-        if (this.checkDirection(board, row, col, -1, 1, player)) {
-            return game_1.WinReason.DIAGONAL;
+        const diagonal1Cells = this.getWinningCells(board, row, col, -1, 1, player);
+        if (diagonal1Cells) {
+            return { winReason: game_1.WinReason.DIAGONAL, winningCells: diagonal1Cells };
         }
         // Check diagonal (top-left to bottom-right)
-        if (this.checkDirection(board, row, col, 1, 1, player)) {
-            return game_1.WinReason.DIAGONAL;
+        const diagonal2Cells = this.getWinningCells(board, row, col, 1, 1, player);
+        if (diagonal2Cells) {
+            return { winReason: game_1.WinReason.DIAGONAL, winningCells: diagonal2Cells };
         }
         return null;
     }
@@ -85,6 +90,38 @@ class GameLogic {
             c += colDir;
         }
         return count;
+    }
+    /**
+     * Get winning cells in a specific direction if there's a win
+     * Returns array of 4+ cells or null if no win
+     */
+    static getWinningCells(board, row, col, rowDir, colDir, player) {
+        const cells = [{ row, col }];
+        // Collect cells in positive direction
+        let r = row + rowDir;
+        let c = col + colDir;
+        while (r >= 0 && r < game_1.ROWS &&
+            c >= 0 && c < game_1.COLS &&
+            board[r][c] === player) {
+            cells.push({ row: r, col: c });
+            r += rowDir;
+            c += colDir;
+        }
+        // Collect cells in negative direction
+        r = row - rowDir;
+        c = col - colDir;
+        while (r >= 0 && r < game_1.ROWS &&
+            c >= 0 && c < game_1.COLS &&
+            board[r][c] === player) {
+            cells.push({ row: r, col: c });
+            r -= rowDir;
+            c -= colDir;
+        }
+        if (cells.length >= 4) {
+            console.log(`🏆 Winning cells found: ${cells.length} cells in direction (${rowDir},${colDir})`);
+            return cells;
+        }
+        return null;
     }
     /**
      * Check if the board is full (draw condition)
@@ -128,12 +165,13 @@ class GameLogic {
             return { success: false, error: 'Failed to drop disc' };
         }
         // Check for win
-        const winReason = this.checkWin(board, row, column);
-        if (winReason) {
+        const winResult = this.checkWin(board, row, column);
+        if (winResult) {
             return {
                 success: true,
                 row,
-                winReason,
+                winReason: winResult.winReason,
+                winningCells: winResult.winningCells,
                 winner: player === game_1.CellValue.PLAYER1 ? 'player1' : 'player2',
             };
         }
