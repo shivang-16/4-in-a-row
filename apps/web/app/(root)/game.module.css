@@ -244,6 +244,141 @@
   box-shadow: 0px 0px 0px #b37400;
 }
 
+.buttonFriend {
+  background: linear-gradient(180deg, #2ecc71 0%, #27ae60 100%);
+  box-shadow: 0px 5px 0px #1e8449,
+              0px 10px 10px rgba(0,0,0,0.3);
+  margin-top: 15px;
+  width: 50%;
+}
+.buttonFriend:active {
+  box-shadow: 0px 0px 0px #1e8449;
+}
+
+/* Friend Modal Specific Styles */
+.friendSection {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.friendSectionTitle {
+  font-size: 1rem;
+  color: #ccc;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.friendDivider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  margin: 15px 0;
+}
+
+.friendDivider::before,
+.friendDivider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(160, 68, 255, 0.5), transparent);
+}
+
+.friendDivider span {
+  padding: 0 15px;
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.roomCodeInput {
+  padding: 15px 20px;
+  font-size: 1.5rem;
+  border-radius: 12px;
+  border: 3px solid #3b1f52;
+  text-align: center;
+  background: linear-gradient(180deg, #2d1b4e 0%, #1a0b2e 100%);
+  color: #fff;
+  font-family: inherit;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
+  transition: border-color 0.3s;
+  text-transform: uppercase;
+  letter-spacing: 8px;
+  width: 180px;
+}
+
+.roomCodeInput:focus {
+  outline: none;
+  border-color: #a044ff;
+  box-shadow: 0 0 15px rgba(160, 68, 255, 0.3),
+              inset 0 2px 5px rgba(0,0,0,0.5);
+}
+
+.roomCodeDisplay {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(180deg, #2d1b4e 0%, #1a0b2e 100%);
+  padding: 15px 25px;
+  border-radius: 12px;
+  border: 3px solid #a044ff;
+}
+
+.roomCode {
+  font-size: 2rem;
+  font-weight: bold;
+  letter-spacing: 8px;
+  color: #ffca28;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+.copyButton {
+  padding: 10px 15px;
+  background: linear-gradient(180deg, #a044ff 0%, #6a3093 100%);
+  border: 2px solid #4a2c7a;
+  border-radius: 8px;
+  color: white;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0px 3px 0px #3b1f52;
+  transition: all 0.1s;
+}
+
+.copyButton:hover {
+  filter: brightness(1.1);
+  transform: translateY(-2px);
+}
+
+.copyButton:active {
+  transform: translateY(2px);
+  box-shadow: 0px 0px 0px #3b1f52;
+}
+
+.waitingText {
+  color: #ccc;
+  font-size: 1rem;
+  margin: 10px 0;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.roomError {
+  color: #ff4444;
+  background: rgba(255, 68, 68, 0.1);
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  margin-top: 10px;
+  text-align: center;
+}
+
 /* Modal System */
 .modalOverlay {
   position: fixed;
@@ -646,6 +781,30 @@
   text-shadow: 0 2px 0 rgba(0,0,0,0.3);
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+
+.unreadBadge {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  min-width: 22px;
+  height: 22px;
+  background: linear-gradient(180deg, #ff4444 0%, #cc0000 100%);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  box-shadow: 0 2px 6px rgba(255, 0, 0, 0.5);
+  animation: badgePulse 1.5s infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 2px 6px rgba(255, 0, 0, 0.5); }
+  50% { transform: scale(1.1); box-shadow: 0 3px 10px rgba(255, 0, 0, 0.7); }
 }
 
 .chatToggle:hover {

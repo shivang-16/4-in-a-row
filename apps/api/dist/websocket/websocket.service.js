@@ -11,6 +11,8 @@ const game_1 = require("../types/game");
 class WebSocketService {
     io;
     connectedPlayers = new Map();
+    // Private rooms for "Play with Friend" feature: roomCode -> { hostUsername, hostSocket }
+    privateRooms = new Map();
     constructor(httpServer) {
         // Define allowed origins
         const allowedOrigins = [
@@ -48,8 +50,17 @@ class WebSocketService {
             });
             // Handle player ready for matchmaking
             socket.on('matchmaking:join', (data) => {
-                console.log(`🎮 Player ${data.username} joined matchmaking`);
-                matchmaking_service_1.matchmakingService.joinQueue(data.username);
+                const { username } = data;
+                // Check if player has an active private room - they should not be in matchmaking
+                const existingRoomCode = socket.data.roomCode;
+                if (existingRoomCode && this.privateRooms.has(existingRoomCode)) {
+                    // Clean up the private room first
+                    this.privateRooms.delete(existingRoomCode);
+                    socket.data.roomCode = null;
+                    console.log(`🧹 Cleaned up private room ${existingRoomCode} for ${username} joining matchmaking`);
+                }
+                console.log(`🎮 Player ${username} joined matchmaking`);
+                matchmaking_service_1.matchmakingService.joinQueue(username);
                 socket.emit('matchmaking:queued', { position: matchmaking_service_1.matchmakingService.getQueueSize() });
             });
             // Handle player wanting to play with bot immediately
@@ -59,6 +70,55 @@ class WebSocketService {
                 const nouns = ['Fox', 'Wolf', 'Dragon', 'Phoenix', 'Titan', 'Ninja', 'Knight', 'Wizard', 'Falcon', 'Panther'];
                 const botName = `${adjectives[Math.floor(Math.random() * adjectives.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}`;
                 game_manager_service_1.gameManager.createGame(data.username, botName, true);
+            });
+            // Handle creating a private room (Play with Friend)
+            socket.on('room:create', (data) => {
+                const { username } = data;
+                // IMPORTANT: Remove player from matchmaking queue if they were there
+                // Private rooms and random matchmaking are completely separate
+                matchmaking_service_1.matchmakingService.leaveQueue(username);
+                // Generate a 6-character uppercase alphanumeric room code
+                const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+                // Store the room with host info
+                this.privateRooms.set(roomCode, { hostUsername: username, hostSocket: socket });
+                socket.data.roomCode = roomCode;
+                console.log(`🏠 Room created: ${roomCode} by ${username}`);
+                // Send room code back to the host
+                socket.emit('room:created', { roomCode });
+            });
+            // Handle joining a private room
+            socket.on('room:join', (data) => {
+                const { username, roomCode } = data;
+                const normalizedCode = roomCode.toUpperCase().trim();
+                const room = this.privateRooms.get(normalizedCode);
+                if (!room) {
+                    socket.emit('room:error', { message: 'Room not found. Please check the code and try again.' });
+                    return;
+                }
+                if (room.hostUsername === username) {
+                    socket.emit('room:error', { message: 'You cannot join your own room!' });
+                    return;
+                }
+                console.log(`🤝 ${username} joining room ${normalizedCode} hosted by ${room.hostUsername}`);
+                // Remove the room from waiting rooms
+                this.privateRooms.delete(normalizedCode);
+                // Clear room code from host's socket data
+                room.hostSocket.data.roomCode = null;
+                // IMPORTANT: Remove both players from matchmaking queue (just in case)
+                matchmaking_service_1.matchmakingService.leaveQueue(room.hostUsername);
+                matchmaking_service_1.matchmakingService.leaveQueue(username);
+                // Create the game between host and joiner
+                game_manager_service_1.gameManager.createGame(room.hostUsername, username, false);
+                console.log(`🎮 Private game started: ${room.hostUsername} vs ${username}`);
+            });
+            // Handle leaving/canceling a private room
+            socket.on('room:leave', () => {
+                const roomCode = socket.data.roomCode;
+                if (roomCode && this.privateRooms.has(roomCode)) {
+                    this.privateRooms.delete(roomCode);
+                    socket.data.roomCode = null;
+                    console.log(`🚪 Room ${roomCode} closed by host`);
+                }
             });
             // Handle game moves
             socket.on('game:move', (data) => {
@@ -83,6 +143,12 @@ class WebSocketService {
                 if (username) {
                     this.connectedPlayers.delete(username);
                     matchmaking_service_1.matchmakingService.leaveQueue(username);
+                    // Clean up any private room hosted by this player
+                    const roomCode = socket.data.roomCode;
+                    if (roomCode && this.privateRooms.has(roomCode)) {
+                        this.privateRooms.delete(roomCode);
+                        console.log(`🚪 Room ${roomCode} closed due to host disconnect`);
+                    }
                     console.log(`❌ Player disconnected: ${username}`);
                     // Check if player was in a game
                     const game = game_manager_service_1.gameManager.getGameByPlayer(username);

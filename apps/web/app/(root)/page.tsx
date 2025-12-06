@@ -35,6 +35,7 @@ export default function Home() {
   const [chatMessages, setChatMessages] = useState<Array<{username: string, message: string, timestamp: Date}>>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   
   // Audio states
   const [bgMusicEnabled, setBgMusicEnabled] = useState(false);
@@ -43,8 +44,23 @@ export default function Home() {
   const opponentDropSoundRef = useRef<HTMLAudioElement | null>(null);
   const gameEndSoundRef = useRef<HTMLAudioElement | null>(null);
   
+  // Refs for tracking state in socket event handlers
+  const chatOpenRef = useRef(chatOpen);
+  const usernameRef = useRef(username);
+  
+  // Keep refs in sync with state
+  useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
+  useEffect(() => { usernameRef.current = username; }, [username]);
+  
   // Modal states
   const [showSpectateModal, setShowSpectateModal] = useState(false);
+  const [showFriendModal, setShowFriendModal] = useState(false);
+  
+  // Play with Friend states
+  const [myRoomCode, setMyRoomCode] = useState<string | null>(null);
+  const [friendRoomCode, setFriendRoomCode] = useState('');
+  const [roomError, setRoomError] = useState<string | null>(null);
+  const [isWaitingInRoom, setIsWaitingInRoom] = useState(false);
 
   useEffect(() => {
     const newSocket = io(API_URL);
@@ -66,6 +82,12 @@ export default function Home() {
       setOpponent(data.opponent);
       setGameStatus('playing');
       setMoveCount(0);
+      
+      // Close friend modal if open (game started from private room)
+      setShowFriendModal(false);
+      setMyRoomCode(null);
+      setIsWaitingInRoom(false);
+      setFriendRoomCode('');
       
       // Set which player I am
       const iAmPlayer1 = data.yourTurn;
@@ -108,6 +130,23 @@ export default function Home() {
     // Chat event
     newSocket.on('chat:message', (data: {username: string, message: string}) => {
       setChatMessages(prev => [...prev, {...data, timestamp: new Date()}]);
+      // Increment unread count only if chat is closed and message is from opponent
+      if (!chatOpenRef.current && data.username !== usernameRef.current) {
+        setUnreadCount(prev => prev + 1);
+      }
+    });
+
+    // Private room events
+    newSocket.on('room:created', (data: { roomCode: string }) => {
+      console.log('🏠 Room created:', data.roomCode);
+      setMyRoomCode(data.roomCode);
+      setIsWaitingInRoom(true);
+      setRoomError(null);
+    });
+
+    newSocket.on('room:error', (data: { message: string }) => {
+      console.error('❌ Room error:', data.message);
+      setRoomError(data.message);
     });
 
     newSocket.on('game:error', (data) => {
@@ -182,6 +221,52 @@ export default function Home() {
     socket.emit('matchmaking:join-bot', { username });
   };
 
+  // Play with Friend handlers
+  const handlePlayWithFriend = () => {
+    if (!username.trim()) {
+      alert('Please enter a username first!');
+      return;
+    }
+    setShowFriendModal(true);
+    setRoomError(null);
+    setFriendRoomCode('');
+  };
+
+  const handleCreateRoom = () => {
+    if (!socket) return;
+    socket.emit('player:join', { username });
+    socket.emit('room:create', { username });
+  };
+
+  const handleJoinRoom = () => {
+    if (!socket || !friendRoomCode.trim()) return;
+    setRoomError(null);
+    setGameMode('pvp');
+    socket.emit('player:join', { username });
+    socket.emit('room:join', { username, roomCode: friendRoomCode });
+  };
+
+  const handleCancelRoom = () => {
+    if (!socket) return;
+    socket.emit('room:leave');
+    setMyRoomCode(null);
+    setIsWaitingInRoom(false);
+    setShowFriendModal(false);
+    setFriendRoomCode('');
+    setRoomError(null);
+  };
+
+  const handleCloseFriendModal = () => {
+    if (isWaitingInRoom && socket) {
+      socket.emit('room:leave');
+    }
+    setShowFriendModal(false);
+    setMyRoomCode(null);
+    setIsWaitingInRoom(false);
+    setFriendRoomCode('');
+    setRoomError(null);
+  };
+
   const handleColumnClick = (col: number) => {
     if (!gameId || !socket || !myPlayerNumber) return;
     
@@ -212,6 +297,7 @@ export default function Home() {
     setGameMode(null);
     setMoveCount(0);
     setChatMessages([]);
+    setUnreadCount(0);
   };
   
   const handleSendChat = () => {
@@ -297,6 +383,7 @@ export default function Home() {
               <button onClick={handleJoinPvP} className={styles.button}>Find Player</button>
               <button onClick={handleJoinBot} className={`${styles.button} ${styles.buttonSecondary}`}>Play Bot</button>
             </div>
+            <button onClick={handlePlayWithFriend} className={`${styles.button} ${styles.buttonFriend}`}>👥 Play with Friend</button>
            </div>
         ) : (
           <>
@@ -383,8 +470,16 @@ export default function Home() {
 
       {/* Chat Panel */}
       <div className={`${styles.chatPanel} ${chatOpen ? styles.chatOpen : ''}`}>
-        <button className={styles.chatToggle} onClick={() => setChatOpen(!chatOpen)}>
+        <button className={styles.chatToggle} onClick={() => {
+          if (!chatOpen) {
+            setUnreadCount(0); // Reset unread count when opening chat
+          }
+          setChatOpen(!chatOpen);
+        }}>
           {chatOpen ? 'close' : 'chat'}
+          {!chatOpen && unreadCount > 0 && (
+            <span className={styles.unreadBadge}>{unreadCount > 9 ? '9+' : unreadCount}</span>
+          )}
         </button>
         
         {chatOpen && (
@@ -435,6 +530,80 @@ export default function Home() {
                 }}>Spectate</button>
                 <button className={`${styles.modalButton} ${styles.cancelBtn}`} onClick={() => setShowSpectateModal(false)}>Cancel</button>
              </div>
+          </div>
+        </div>
+      )}
+
+      {/* Play with Friend Modal */}
+      {showFriendModal && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalContent}>
+            <button className={styles.closeButton} onClick={handleCloseFriendModal}>×</button>
+            <div className={styles.modalIcon}>👥</div>
+            <h2 className={styles.modalTitle}>Play with Friend</h2>
+            
+            {!isWaitingInRoom ? (
+              <>
+                {/* Create Room Section */}
+                <div className={styles.friendSection}>
+                  <p className={styles.friendSectionTitle}>Create a Room</p>
+                  <button className={`${styles.button} ${styles.buttonFriend}`} onClick={handleCreateRoom}>
+                    🏠 Create Room
+                  </button>
+                </div>
+                
+                <div className={styles.friendDivider}>
+                  <span>OR</span>
+                </div>
+                
+                {/* Join Room Section */}
+                <div className={styles.friendSection}>
+                  <p className={styles.friendSectionTitle}>Join a Room</p>
+                  <input
+                    type="text"
+                    value={friendRoomCode}
+                    onChange={(e) => setFriendRoomCode(e.target.value.toUpperCase())}
+                    placeholder="Enter Room Code"
+                    className={styles.roomCodeInput}
+                    maxLength={6}
+                  />
+                  <button 
+                    className={`${styles.button} ${styles.buttonSecondary}`} 
+                    onClick={handleJoinRoom}
+                    disabled={!friendRoomCode.trim()}
+                  >
+                    🚀 Join Room
+                  </button>
+                </div>
+                
+                {roomError && (
+                  <p className={styles.roomError}>{roomError}</p>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Waiting in Room Section */}
+                <div className={styles.friendSection}>
+                  <p className={styles.friendSectionTitle}>Your Room Code</p>
+                  <div className={styles.roomCodeDisplay}>
+                    <span className={styles.roomCode}>{myRoomCode}</span>
+                    <button 
+                      className={styles.copyButton}
+                      onClick={() => {
+                        navigator.clipboard.writeText(myRoomCode || '');
+                        alert('Room code copied!');
+                      }}
+                    >
+                      📋 Copy
+                    </button>
+                  </div>
+                  <p className={styles.waitingText}>⏳ Waiting for friend to join...</p>
+                  <button className={`${styles.button} ${styles.cancelBtn}`} onClick={handleCancelRoom}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
