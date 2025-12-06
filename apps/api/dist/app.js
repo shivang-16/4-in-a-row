@@ -11,7 +11,8 @@ dotenv_1.default.config();
 const app = (0, express_1.default)();
 // Middleware
 app.use((0, cors_1.default)({
-    origin: ['https://redbird-polished-whippet.ngrok-free.app', 'http://localhost:3000']
+    origin: ['https://4-in-a-row-web-kappa.vercel.app', 'http://localhost:3000'],
+    credentials: true,
 }));
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
