@@ -1,135 +1,276 @@
-# Turborepo starter
+# 🎮 4 in a Row - Multiplayer Game
 
-This Turborepo starter is maintained by the Turborepo core team.
+A real-time multiplayer **Connect 4 (4 in a Row)** game built with modern web technologies. Play against other players online, challenge an AI bot, or invite friends to play with private room codes!
 
-## Using this example
+![Game Preview](https://img.shields.io/badge/Status-Live-brightgreen) ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue) ![Next.js](https://img.shields.io/badge/Next.js-16-black) ![Socket.IO](https://img.shields.io/badge/Socket.IO-4.8-white)
 
-Run the following command:
+## ✨ Features
 
-```sh
-npx create-turbo@latest
-```
+### 🎲 Game Modes
+- **Find Player** - Random matchmaking with other online players
+- **Play with Bot** - Challenge a strategic AI opponent
+- **Play with Friend** - Create private rooms with shareable codes
 
-## What's inside?
+### 🎨 Visual Experience
+- Beautiful 3D wooden board design with glass morphism effects
+- Smooth disc drop animations with bounce effects
+- **Winning line highlight** with golden pulsing glow animation
+- Fully responsive design for desktop, tablet, and mobile
 
-This Turborepo includes the following packages/apps:
+### 💬 Real-time Features
+- Live game updates via WebSocket
+- In-game chat with unread message badges
+- Automatic reconnection handling
+- 30-second disconnect timeout
 
-### Apps and Packages
+### 🔊 Audio
+- Background music toggle
+- Disc drop sound effects
+- Game end celebration sounds
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+## 🛠️ Tech Stack
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+| Layer | Technology |
+|-------|------------|
+| **Frontend** | Next.js 16, React 19, TypeScript |
+| **Backend** | Node.js, Express, TypeScript |
+| **Real-time** | Socket.IO |
+| **Database** | MongoDB (Mongoose) |
+| **Message Queue** | Apache Kafka |
+| **Build System** | Turborepo, pnpm |
+| **Styling** | CSS Modules |
 
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
-```
-
-You can build a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+## 📁 Project Structure
 
 ```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+emitrr/
+├── apps/
+│   ├── api/                    # Backend API server
+│   │   ├── src/
+│   │   │   ├── models/         # MongoDB models
+│   │   │   ├── services/       # Business logic
+│   │   │   │   ├── game-logic.service.ts
+│   │   │   │   ├── game-manager.service.ts
+│   │   │   │   ├── bot.service.ts
+│   │   │   │   ├── matchmaking.service.ts
+│   │   │   │   └── kafka.service.ts
+│   │   │   ├── websocket/      # WebSocket handlers
+│   │   │   ├── types/          # TypeScript types
+│   │   │   └── server.ts       # Entry point
+│   │   └── package.json
+│   │
+│   ├── web/                    # Frontend Next.js app
+│   │   ├── app/
+│   │   │   ├── (root)/
+│   │   │   │   ├── page.tsx    # Main game page
+│   │   │   │   └── game.module.css
+│   │   │   ├── layout.tsx
+│   │   │   └── globals.css
+│   │   ├── public/             # Static assets (sounds, images)
+│   │   └── package.json
+│   │
+│   └── docs/                   # Documentation site
+│
+├── packages/                   # Shared packages
+│   ├── ui/                     # Shared UI components
+│   ├── eslint-config/          # ESLint configuration
+│   └── typescript-config/      # TypeScript configuration
+│
+├── turbo.json                  # Turborepo configuration
+├── pnpm-workspace.yaml         # pnpm workspace config
+└── package.json                # Root package.json
 ```
 
-### Develop
+## 🚀 Getting Started
 
-To develop all apps and packages, run the following command:
+### Prerequisites
 
-```
-cd my-turborepo
+- **Node.js** >= 18.0.0
+- **pnpm** >= 8.0.0 (recommended package manager)
+- **MongoDB** (local or cloud instance)
+- **Kafka** (optional, for event streaming)
 
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
+### Installation
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
-```
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/shivang-16/4-in-a-row.git
+   cd 4-in-a-row
+   ```
 
-You can develop a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+2. **Install dependencies**
+   ```bash
+   pnpm install
+   ```
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
+3. **Set up environment variables**
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
+   Create `.env` file in `apps/api/`:
+   ```env
+   # Server
+   PORT=3002
+   NODE_ENV=development
 
-### Remote Caching
+   # MongoDB
+   MONGODB_URI=mongodb://localhost:27017/4-in-a-row
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+   # Kafka (optional)
+   KAFKA_BROKERS=localhost:9092
+   KAFKA_ENABLED=false
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+   # Frontend URL (for CORS)
+   FRONTEND_URL=http://localhost:3000
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+   # Matchmaking
+   MATCHMAKING_TIMEOUT_MS=10000
+   ```
 
-```
-cd my-turborepo
+   Create `.env.local` file in `apps/web/`:
+   ```env
+   NEXT_PUBLIC_API_URL=http://localhost:3002
+   ```
 
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
+### Running Locally
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
+**Development mode (all apps):**
+```bash
+pnpm dev
 ```
 
-## Useful Links
+This starts:
+- Frontend at `http://localhost:3000`
+- Backend API at `http://localhost:3002`
 
-Learn more about the power of Turborepo:
+**Run specific apps:**
+```bash
+# Frontend only
+pnpm dev --filter=web
 
-- [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.com/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.com/docs/reference/configuration)
-- [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
+# Backend only
+pnpm dev --filter=api
+```
+
+### Building for Production
+
+```bash
+# Build all apps
+pnpm build
+
+# Build specific app
+pnpm build --filter=web
+pnpm build --filter=api
+```
+
+### Running Production Build
+
+```bash
+# Start the API server
+cd apps/api && pnpm start
+
+# Start the web app
+cd apps/web && pnpm start
+```
+
+## 🎯 How to Play
+
+### Game Rules
+1. Two players take turns dropping colored discs into a 7-column, 6-row grid
+2. Pieces fall straight down to the lowest available space
+3. The first player to connect **4 discs** in a row wins!
+4. Connections can be horizontal, vertical, or diagonal
+5. If the board fills up with no winner, it's a draw
+
+### Game Modes
+
+| Mode | Description |
+|------|-------------|
+| **Find Player** | Join matchmaking queue. If no match in 10 seconds, you'll play against a bot |
+| **Play Bot** | Instantly start a game against the AI |
+| **Play with Friend** | Create a private room, share the 6-character code with a friend |
+
+## 🌐 Deployment
+
+### Deploy to Render (Backend)
+
+1. Create a new **Web Service** on Render
+2. Connect your GitHub repository
+3. Configure:
+   - **Build Command:** `pnpm install --frozen-lockfile; pnpm run build`
+   - **Start Command:** `pnpm start`
+   - **Root Directory:** `apps/api`
+4. Add environment variables in Render dashboard
+
+### Deploy to Vercel (Frontend)
+
+1. Import project to Vercel
+2. Configure:
+   - **Root Directory:** `apps/web`
+   - **Framework Preset:** Next.js
+3. Add environment variable:
+   - `NEXT_PUBLIC_API_URL` = Your Render backend URL
+
+## 🔧 Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PORT` | API server port | `3002` |
+| `MONGODB_URI` | MongoDB connection string | Required |
+| `KAFKA_ENABLED` | Enable Kafka event streaming | `false` |
+| `MATCHMAKING_TIMEOUT_MS` | Time before bot match | `10000` |
+| `FRONTEND_URL` | Frontend URL for CORS | `http://localhost:3000` |
+
+### pnpm Version
+
+This project uses **pnpm 8.15.2**. The version is locked in `package.json`:
+```json
+{
+  "packageManager": "pnpm@8.15.2"
+}
+```
+
+## 📝 API Events (WebSocket)
+
+### Client → Server
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `player:join` | `{ username }` | Register player |
+| `matchmaking:join` | `{ username }` | Join matchmaking queue |
+| `matchmaking:join-bot` | `{ username }` | Start bot game |
+| `room:create` | `{ username }` | Create private room |
+| `room:join` | `{ username, roomCode }` | Join private room |
+| `game:move` | `{ gameId, column }` | Make a move |
+| `chat:send` | `{ gameId, username, message }` | Send chat message |
+
+### Server → Client
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `game:started` | `{ gameId, opponent, isBot, yourTurn }` | Game started |
+| `game:update` | `{ board, currentTurn, lastMove }` | Board updated |
+| `game:ended` | `{ winner, reason, winningCells }` | Game ended |
+| `room:created` | `{ roomCode }` | Room code generated |
+| `chat:message` | `{ username, message }` | Chat message received |
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+## 📄 License
+
+This project is open source and available under the [MIT License](LICENSE).
+
+## 👤 Author
+
+**Shivang**
+- GitHub: [@shivang-16](https://github.com/shivang-16)
+
+---
+
+<p align="center">Made with ❤️ using Next.js, Express, and Socket.IO</p>
