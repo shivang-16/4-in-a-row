@@ -1,34 +1,36 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo, type CSSProperties } from 'react';
 import { io, Socket } from 'socket.io-client';
 import styles from './game.module.css';
 
-const ROWS = 6;
-const COLS = 7;
+const DEFAULT_ROWS = 6;
+const DEFAULT_COLS = 7;
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
-type CellValue = 0 | 1 | 2;
-type Board = CellValue[][];
+type Board = number[][];
+
+function emptyBoard(rows: number, cols: number): Board {
+  return Array(rows)
+    .fill(null)
+    .map(() => Array(cols).fill(0));
+}
 
 export default function Home() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [username, setUsername] = useState('');
   const [gameId, setGameId] = useState<string | null>(null);
-  const [board, setBoard] = useState<Board>(() =>
-    Array(ROWS)
-      .fill(null)
-      .map(() => Array(COLS).fill(0))
-  );
+  const [board, setBoard] = useState<Board>(() => emptyBoard(DEFAULT_ROWS, DEFAULT_COLS));
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
-  const [myPlayerNumber, setMyPlayerNumber] = useState<1 | 2 | null>(null);
-  const [currentTurn, setCurrentTurn] = useState<1 | 2>(1);
+  const [myPlayerNumber, setMyPlayerNumber] = useState<number | null>(null);
+  const [currentTurn, setCurrentTurn] = useState(1);
   const [opponent, setOpponent] = useState('');
+  const [playerUsernames, setPlayerUsernames] = useState<string[]>([]);
   const [gameStatus, setGameStatus] = useState<'menu' | 'waiting' | 'playing' | 'ended'>('menu');
   const [winner, setWinner] = useState<string | null>(null);
   const [winReason, setWinReason] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [gameMode, setGameMode] = useState<'pvp' | 'bot' | null>(null);
+  const [gameMode, setGameMode] = useState<'pvp' | 'bot' | 'friend' | null>(null);
   const [moveCount, setMoveCount] = useState(0);
   
   // Chat states
@@ -61,6 +63,10 @@ export default function Home() {
   const [friendRoomCode, setFriendRoomCode] = useState('');
   const [roomError, setRoomError] = useState<string | null>(null);
   const [isWaitingInRoom, setIsWaitingInRoom] = useState(false);
+  const [friendJoinWaiting, setFriendJoinWaiting] = useState(false);
+  const [roomMaxPlayers, setRoomMaxPlayers] = useState(2);
+  const [friendMaxPlayers, setFriendMaxPlayers] = useState(2);
+  const [lobbyPlayers, setLobbyPlayers] = useState<string[]>([]);
   const [codeCopied, setCodeCopied] = useState(false);
   
   // UI feedback states
@@ -68,6 +74,43 @@ export default function Home() {
   
   // Winning cells state
   const [winningCells, setWinningCells] = useState<Array<{row: number, col: number}>>([]);
+
+  const boardCols = board[0]?.length ?? DEFAULT_COLS;
+  const boardRows = board.length;
+  const boardLayout = useMemo(() => {
+    const m = Math.max(boardRows, boardCols);
+    const cellSize = Math.max(26, Math.min(88, Math.floor(560 / m)));
+    const gap = Math.max(4, Math.round(cellSize * 0.12));
+    return { cellSize, gap };
+  }, [boardRows, boardCols]);
+
+  const discClasses = useMemo(
+    () => [
+      styles.player1,
+      styles.player2,
+      styles.player3,
+      styles.player4,
+      styles.player5,
+      styles.player6,
+      styles.player7,
+      styles.player8,
+    ],
+    []
+  );
+
+  const floatingClasses = useMemo(
+    () => [
+      styles.p1Floating,
+      styles.p2Floating,
+      styles.p3Floating,
+      styles.p4Floating,
+      styles.p5Floating,
+      styles.p6Floating,
+      styles.p7Floating,
+      styles.p8Floating,
+    ],
+    []
+  );
 
   useEffect(() => {
     const newSocket = io(API_URL);
@@ -83,25 +126,43 @@ export default function Home() {
       setIsConnected(false);
     });
 
-    newSocket.on('game:started', (data) => {
+    newSocket.on('game:started', (data: {
+      gameId: string;
+      board?: Board;
+      opponent?: string;
+      players?: string[];
+      playerUsernames?: string[];
+      yourPlayerNumber: number;
+      yourTurn: boolean;
+      isBot: boolean;
+      isInviteGame?: boolean;
+    }) => {
       console.log('🎮 Game started:', data);
       setGameId(data.gameId);
-      setOpponent(data.opponent);
+      const names = data.playerUsernames ?? data.players ?? [];
+      setPlayerUsernames(names);
+      if (data.board?.length && data.board[0]?.length) {
+        setBoard(data.board);
+      }
+      if (names.length === 2) {
+        setOpponent(data.opponent ?? names.find((u) => u !== usernameRef.current) ?? '');
+      } else {
+        setOpponent('');
+      }
       setGameStatus('playing');
       setMoveCount(0);
-      
-      // Close friend modal if open (game started from private room)
       setShowFriendModal(false);
       setMyRoomCode(null);
       setIsWaitingInRoom(false);
+      setFriendJoinWaiting(false);
       setFriendRoomCode('');
-      
-      // Set which player I am
-      const iAmPlayer1 = data.yourTurn;
-      setMyPlayerNumber(iAmPlayer1 ? 1 : 2);
-      setCurrentTurn(1); // Game always starts with player 1
-      
-      console.log(`✅ I am player ${iAmPlayer1 ? 1 : 2}, opponent: ${data.opponent}, isBot: ${data.isBot}`);
+      setLobbyPlayers([]);
+      setMyPlayerNumber(data.yourPlayerNumber);
+      setCurrentTurn(1);
+      if (data.isBot) setGameMode('bot');
+      else if (data.isInviteGame) setGameMode('friend');
+      else setGameMode('pvp');
+      console.log(`✅ Seat ${data.yourPlayerNumber}, isBot: ${data.isBot}`);
     });
 
     newSocket.on('game:update', (data) => {
@@ -149,11 +210,40 @@ export default function Home() {
     });
 
     // Private room events
-    newSocket.on('room:created', (data: { roomCode: string }) => {
+    newSocket.on('room:created', (data: { roomCode: string; maxPlayers?: number; players?: string[] }) => {
       console.log('🏠 Room created:', data.roomCode);
       setMyRoomCode(data.roomCode);
+      setRoomMaxPlayers(data.maxPlayers ?? 2);
+      setLobbyPlayers(data.players ?? []);
       setIsWaitingInRoom(true);
       setRoomError(null);
+    });
+
+    newSocket.on('room:lobbyUpdate', (data: { players: string[]; maxPlayers: number }) => {
+      setLobbyPlayers(data.players);
+      setRoomMaxPlayers(data.maxPlayers);
+    });
+
+    newSocket.on(
+      'room:joinPending',
+      (data: { roomCode: string; players: string[]; maxPlayers: number }) => {
+        setFriendJoinWaiting(true);
+        setLobbyPlayers(data.players);
+        setRoomMaxPlayers(data.maxPlayers);
+        setShowFriendModal(true);
+        setIsWaitingInRoom(false);
+        setFriendRoomCode(data.roomCode);
+        setRoomError(null);
+      }
+    );
+
+    newSocket.on('room:closed', (data: { reason?: string }) => {
+      setRoomError(data.reason ?? 'Lobby closed');
+      setIsWaitingInRoom(false);
+      setFriendJoinWaiting(false);
+      setMyRoomCode(null);
+      setLobbyPlayers([]);
+      setShowFriendModal(false);
     });
 
     newSocket.on('room:error', (data: { message: string }) => {
@@ -253,18 +343,20 @@ export default function Home() {
     setShowFriendModal(true);
     setRoomError(null);
     setFriendRoomCode('');
+    setFriendJoinWaiting(false);
+    setLobbyPlayers([]);
   };
 
   const handleCreateRoom = () => {
     if (!socket) return;
     socket.emit('player:join', { username });
-    socket.emit('room:create', { username });
+    socket.emit('room:create', { username, maxPlayers: friendMaxPlayers });
   };
 
   const handleJoinRoom = () => {
     if (!socket || !friendRoomCode.trim()) return;
     setRoomError(null);
-    setGameMode('pvp');
+    setGameMode('friend');
     socket.emit('player:join', { username });
     socket.emit('room:join', { username, roomCode: friendRoomCode });
   };
@@ -277,10 +369,12 @@ export default function Home() {
     setShowFriendModal(false);
     setFriendRoomCode('');
     setRoomError(null);
+    setLobbyPlayers([]);
+    setFriendJoinWaiting(false);
   };
 
   const handleCloseFriendModal = () => {
-    if (isWaitingInRoom && socket) {
+    if ((isWaitingInRoom || friendJoinWaiting) && socket) {
       socket.emit('room:leave');
     }
     setShowFriendModal(false);
@@ -288,6 +382,8 @@ export default function Home() {
     setIsWaitingInRoom(false);
     setFriendRoomCode('');
     setRoomError(null);
+    setLobbyPlayers([]);
+    setFriendJoinWaiting(false);
   };
 
   const handleColumnClick = (col: number) => {
@@ -311,7 +407,7 @@ export default function Home() {
 
   const handlePlayAgain = () => {
     setGameStatus('menu');
-    setBoard(Array(ROWS).fill(null).map(() => Array(COLS).fill(0)));
+    setBoard(emptyBoard(DEFAULT_ROWS, DEFAULT_COLS));
     setWinner(null);
     setWinReason(null);
     setGameId(null);
@@ -322,6 +418,11 @@ export default function Home() {
     setChatMessages([]);
     setUnreadCount(0);
     setWinningCells([]);
+    setPlayerUsernames([]);
+    setOpponent('');
+    setLobbyPlayers([]);
+    setFriendJoinWaiting(false);
+    setRoomMaxPlayers(2);
   };
   
   const handleSendChat = () => {
@@ -331,13 +432,24 @@ export default function Home() {
     setChatInput('');
   };
 
-  const getCellClass = (value: CellValue) => {
-    if (value === 1) return styles.player1;
-    if (value === 2) return styles.player2;
+  const getCellClass = (value: number) => {
+    if (value >= 1 && value <= 8) return discClasses[value - 1];
     return '';
   };
 
-  const isMyTurn = myPlayerNumber === currentTurn;
+  const getFloatingClass = () => {
+    if (myPlayerNumber !== null && myPlayerNumber >= 1 && myPlayerNumber <= 8) {
+      return floatingClasses[myPlayerNumber - 1];
+    }
+    return styles.p1Floating;
+  };
+
+  const turnPlayerName =
+    playerUsernames.length > 0 && currentTurn >= 1 && currentTurn <= playerUsernames.length
+      ? playerUsernames[currentTurn - 1]
+      : '…';
+
+  const isMyTurn = myPlayerNumber !== null && myPlayerNumber === currentTurn;
   const iAmWinner = winner === username;
   const isDraw = winReason === 'draw';
 
@@ -356,29 +468,51 @@ export default function Home() {
   return (
     <div className={styles.container}>
       {/* Sidebar */}
-      <div className={styles.sidebar}>
-        {/* Opponent Profile (Top) */}
-        <div className={styles.playerProfile}>
-          <div className={styles.avatarBox}>
-             <span className={styles.avatar}>💡</span>
-          </div>
-          <span className={styles.playerName}>{opponent || 'Waiting...'}</span>
-          <div className={`${styles.miniDisc} ${styles.p2DiscPreview}`}></div>
-        </div>
-
-        {/* VS Badge */}
-        <div className={styles.vsBadge}>
-          <span className={styles.vsText}>VS</span>
-        </div>
-
-        {/* Player Profile (Bottom) */}
-        <div className={styles.playerProfile}>
-          <div className={`${styles.miniDisc} ${styles.p1DiscPreview}`}></div>
-          <span className={styles.playerName}>(You) {username || 'Player'}</span>
-           <div className={styles.avatarBox}>
-             <span className={styles.avatar}>😎</span>
-          </div>
-        </div>
+      <div
+        className={`${styles.sidebar} ${playerUsernames.length > 2 ? styles.sidebarWide : ''}`}
+      >
+        {playerUsernames.length > 2 ? (
+          <>
+            <p className={styles.friendSectionTitle} style={{ marginBottom: 8 }}>
+              Players
+            </p>
+            <div className={styles.playersRoster}>
+              {playerUsernames.map((name, i) => (
+                <div key={`${name}-${i}`} className={styles.rosterRow}>
+                  <span className={`${styles.rosterSwatch} ${discClasses[i] ?? ''}`} />
+                  <span
+                    className={`${styles.playerName} ${
+                      currentTurn === i + 1 ? styles.rosterCurrent : ''
+                    }`}
+                  >
+                    {name}
+                    {name === username ? ' (you)' : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div className={styles.playerProfile}>
+              <div className={styles.avatarBox}>
+                <span className={styles.avatar}>💡</span>
+              </div>
+              <span className={styles.playerName}>{opponent || 'Waiting...'}</span>
+              <div className={`${styles.miniDisc} ${styles.p2DiscPreview}`}></div>
+            </div>
+            <div className={styles.vsBadge}>
+              <span className={styles.vsText}>VS</span>
+            </div>
+            <div className={styles.playerProfile}>
+              <div className={`${styles.miniDisc} ${styles.p1DiscPreview}`}></div>
+              <span className={styles.playerName}>(You) {username || 'Player'}</span>
+              <div className={styles.avatarBox}>
+                <span className={styles.avatar}>😎</span>
+              </div>
+            </div>
+          </>
+        )}
 
         <div className={styles.sidebarFooter}>
           <button 
@@ -425,7 +559,15 @@ export default function Home() {
             )}
 
             {/* Game Board Wrapper */}
-            <div className={styles.boardWrapper}>
+            <div
+              className={`${styles.boardWrapper} ${boardRows > DEFAULT_ROWS || boardCols > DEFAULT_COLS ? styles.boardScale : ''}`}
+              style={
+                {
+                  ['--cell-size']: `${boardLayout.cellSize}px`,
+                  ['--board-gap']: `${boardLayout.gap}px`,
+                } as CSSProperties
+              }
+            >
                {/* Turn Indicator / Game Status Banner */}
                <div className={styles.statusBanner}>
                   {gameStatus === 'ended' ? (
@@ -441,16 +583,24 @@ export default function Home() {
                     <>
                       <span className={styles.statusIcon}>{isMyTurn ? '👉' : '⏳'}</span>
                       <span className={styles.statusText}>
-                        {isMyTurn ? "Your Turn!" : `${opponent}'s Turn`}
+                        {isMyTurn ? 'Your Turn!' : `${turnPlayerName}'s turn`}
                       </span>
-                      <div className={`${styles.turnIndicatorDisc} ${currentTurn === 1 ? styles.p1DiscPreview : styles.p2DiscPreview}`}></div>
+                      <div
+                        className={`${styles.turnIndicatorDisc} ${
+                          currentTurn >= 1 && currentTurn <= 8
+                            ? discClasses[currentTurn - 1]
+                            : styles.p1DiscPreview
+                        }`}
+                      />
                     </>
                   ) : null}
                </div>
 
                {/* Hover Row (Floating Disc) */}
                <div className={styles.hoverRow}>
-                 {Array(COLS).fill(0).map((_, colIndex) => (
+                 {Array(boardCols)
+                   .fill(0)
+                   .map((_, colIndex) => (
                    <div 
                       key={colIndex} 
                       className={styles.hoverCell}
@@ -459,7 +609,7 @@ export default function Home() {
                       onClick={() => handleColumnClick(colIndex)}
                    >
                       {hoveredCol === colIndex && isMyTurn && !winner && (
-                        <div className={`${styles.floatingDisc} ${myPlayerNumber === 1 ? styles.p1Floating : styles.p2Floating}`}></div>
+                        <div className={`${styles.floatingDisc} ${getFloatingClass()}`}></div>
                       )}
                    </div>
                  ))}
@@ -480,10 +630,11 @@ export default function Home() {
                           onMouseEnter={() => handleMouseEnter(colIndex)}
                           onClick={() => handleColumnClick(colIndex)}
                         >
-                          {/* The "Hole" visual */}
                           <div className={styles.hole}>
                              {cell !== 0 && (
-                               <div className={`${styles.disc} ${cell === 1 ? styles.player1 : styles.player2} ${isWinningCell ? styles.winningDisc : ''}`}></div>
+                               <div
+                                 className={`${styles.disc} ${getCellClass(cell)} ${isWinningCell ? styles.winningDisc : ''}`}
+                               />
                              )}
                           </div>
                         </div>
@@ -527,7 +678,7 @@ export default function Home() {
                 ))
               )}
             </div>
-            {gameStatus === 'playing' && gameMode !== 'bot' && (
+            {gameStatus === 'playing' && gameMode !== 'bot' && gameMode !== null && (
               <div className={styles.chatInput}>
                 <input
                   type="text"
@@ -569,15 +720,35 @@ export default function Home() {
           <div className={styles.modalContent}>
             <button className={styles.closeButton} onClick={handleCloseFriendModal}>×</button>
             <div className={styles.modalIcon}>👥</div>
-            <h2 className={styles.modalTitle}>Play with Friend</h2>
+            <h2 className={styles.modalTitle}>Play with Friends</h2>
             
-            {!isWaitingInRoom ? (
+            {!isWaitingInRoom && !friendJoinWaiting ? (
               <>
-                {/* Create Room Section */}
                 <div className={styles.friendSection}>
-                  <p className={styles.friendSectionTitle}>Create a Room</p>
+                  <p className={styles.friendSectionTitle}>Create a room</p>
+                  <div className={styles.maxPlayersRow}>
+                    <label className={styles.maxPlayersLabel} htmlFor="max-players">
+                      Total players in this game (2–8)
+                    </label>
+                    <select
+                      id="max-players"
+                      className={styles.maxPlayersSelect}
+                      value={friendMaxPlayers}
+                      onChange={(e) => setFriendMaxPlayers(Number(e.target.value))}
+                    >
+                      {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                        <option key={n} value={n}>
+                          {n} players
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className={styles.waitingText} style={{ fontSize: '0.85rem', marginTop: 0 }}>
+                    Invite {friendMaxPlayers - 1} friend{friendMaxPlayers > 2 ? 's' : ''} with the room code.
+                    Larger games use a bigger board and a unique color per player.
+                  </p>
                   <button className={`${styles.button} ${styles.buttonFriend}`} onClick={handleCreateRoom}>
-                    🏠 Create Room
+                    🏠 Create room
                   </button>
                 </div>
                 
@@ -585,9 +756,8 @@ export default function Home() {
                   <span>OR</span>
                 </div>
                 
-                {/* Join Room Section */}
                 <div className={styles.friendSection}>
-                  <p className={styles.friendSectionTitle}>Join a Room</p>
+                  <p className={styles.friendSectionTitle}>Join a room</p>
                   <input
                     type="text"
                     value={friendRoomCode}
@@ -601,7 +771,7 @@ export default function Home() {
                     onClick={handleJoinRoom}
                     disabled={!friendRoomCode.trim()}
                   >
-                    🚀 Join Room
+                    🚀 Join room
                   </button>
                 </div>
                 
@@ -611,25 +781,47 @@ export default function Home() {
               </>
             ) : (
               <>
-                {/* Waiting in Room Section */}
                 <div className={styles.friendSection}>
-                  <p className={styles.friendSectionTitle}>Your Room Code</p>
-                  <div className={styles.roomCodeDisplay}>
-                    <span className={styles.roomCode}>{myRoomCode}</span>
-                    <button 
-                      className={styles.copyButton}
-                      onClick={() => {
-                        navigator.clipboard.writeText(myRoomCode || '');
-                        setCodeCopied(true);
-                        setTimeout(() => setCodeCopied(false), 2000);
-                      }}
-                    >
-                      {codeCopied ? '✓ Copied!' : '📋 Copy'}
-                    </button>
-                  </div>
-                  <p className={styles.waitingText}>⏳ Waiting for friend to join...</p>
+                  {isWaitingInRoom ? (
+                    <>
+                      <p className={styles.friendSectionTitle}>Your room code</p>
+                      <div className={styles.roomCodeDisplay}>
+                        <span className={styles.roomCode}>{myRoomCode}</span>
+                        <button 
+                          className={styles.copyButton}
+                          onClick={() => {
+                            navigator.clipboard.writeText(myRoomCode || '');
+                            setCodeCopied(true);
+                            setTimeout(() => setCodeCopied(false), 2000);
+                          }}
+                        >
+                          {codeCopied ? '✓ Copied!' : '📋 Copy'}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className={styles.friendSectionTitle}>Room {friendRoomCode}</p>
+                      <p className={styles.waitingText}>You&apos;re in the lobby.</p>
+                    </>
+                  )}
+                  <p className={styles.waitingText}>
+                    {lobbyPlayers.length} / {roomMaxPlayers} players joined
+                  </p>
+                  <ul className={styles.lobbyPlayerList}>
+                    {lobbyPlayers.map((p, i) => (
+                      <li key={`${p}-${i}`}>
+                        <span className={`${styles.rosterSwatch} ${discClasses[i] ?? ''}`} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 8 }} />
+                        {p}
+                        {p === username ? ' (you)' : ''}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className={styles.waitingText}>
+                    ⏳ Waiting for more players…
+                  </p>
                   <button className={`${styles.button} ${styles.cancelBtn}`} onClick={handleCancelRoom}>
-                    Cancel
+                    {isWaitingInRoom ? 'Cancel room' : 'Leave lobby'}
                   </button>
                 </div>
               </>

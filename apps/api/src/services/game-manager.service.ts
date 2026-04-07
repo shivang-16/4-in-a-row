@@ -1,65 +1,96 @@
 import { v4 as uuidv4 } from 'uuid';
-import { GameState, GameStatus, CellValue, Player, Move, MoveResult } from '../types/game';
+import {
+  GameState,
+  GameStatus,
+  CellValue,
+  Player,
+  Move,
+  MoveResult,
+  WinReason,
+  cellValueToSlotIndex,
+  slotIndexToCellValue,
+  MAX_PLAYERS_PER_GAME,
+  boardSizeForPlayerCount,
+} from '../types/game';
 import { GameLogic } from './game-logic.service';
 import { BotService } from './bot.service';
 import { wsService } from '../websocket/websocket.service';
 import { Game } from '../models/game.model';
 import { kafkaService, GameEventType } from './kafka.service';
 
+export type GameParticipantInput = { username: string; isBot: boolean };
+
 export class GameManager {
   private activeGames: Map<string, GameState> = new Map();
   private playerToGame: Map<string, string> = new Map();
 
-  createGame(player1Username: string, player2Username: string, isBot: boolean = false): GameState {
-    const gameId = uuidv4();
-    
-    const player1: Player = {
-      id: uuidv4(),
-      username: player1Username,
-      isBot: false,
-      connected: true,
-    };
+  /**
+   * Creates a game from an ordered list of participants (turn order = array order).
+   * Used by matchmaking (2 humans), bot queue (human + bot), and private rooms (2–8 humans).
+   */
+  createGame(participants: GameParticipantInput[], options?: { isInviteGame?: boolean }): GameState {
+    if (participants.length < 2) {
+      throw new Error('At least 2 players required');
+    }
+    if (participants.length > MAX_PLAYERS_PER_GAME) {
+      throw new Error(`At most ${MAX_PLAYERS_PER_GAME} players`);
+    }
 
-    const player2: Player = {
+    const gameId = uuidv4();
+    const { rows, cols } = boardSizeForPlayerCount(participants.length);
+    const players: Player[] = participants.map((p) => ({
       id: uuidv4(),
-      username: player2Username,
-      isBot,
-      connected: !isBot,
-    };
+      username: p.username,
+      isBot: p.isBot,
+      connected: !p.isBot,
+    }));
 
     const gameState: GameState = {
       id: gameId,
-      board: GameLogic.createEmptyBoard(),
-      player1,
-      player2,
+      board: GameLogic.createEmptyBoard(rows, cols),
+      rows,
+      cols,
+      players,
       currentTurn: CellValue.PLAYER1,
       status: GameStatus.IN_PROGRESS,
       winner: null,
       winReason: null,
       moves: [],
       startedAt: new Date(),
+      isInviteGame: options?.isInviteGame,
     };
 
     this.activeGames.set(gameId, gameState);
-    this.playerToGame.set(player1Username, gameId);
-    if (!isBot) {
-      this.playerToGame.set(player2Username, gameId);
+    for (const p of players) {
+      if (!p.isBot) {
+        this.playerToGame.set(p.username, gameId);
+      }
     }
 
-    console.log(`🎮 Game created: ${gameId} - ${player1Username} vs ${player2Username}${isBot ? ' (BOT)' : ''}`);
+    const names = players.map((p) => p.username).join(' vs ');
+    console.log(`🎮 Game created: ${gameId} - ${names}`);
 
     if (wsService) {
-      wsService.emitGameStart(gameId, player1Username, player2Username, isBot);
+      wsService.emitGameStart(gameState);
     }
 
     kafkaService.sendGameEvent(GameEventType.GAME_STARTED, {
       gameId,
-      player1: player1Username,
-      player2: player2Username,
-      isBot,
+      player1: players[0]?.username,
+      player2: players[1]?.username,
+      players: players.map((p) => p.username),
+      isBot: players.some((p) => p.isBot),
     });
 
     return gameState;
+  }
+
+  /** Backward-compatible helper for two-player flows */
+  createTwoPlayerGame(player1Username: string, player2Username: string, player2IsBot: boolean): GameState {
+    return this.createGame([
+      { username: player1Username, isBot: false },
+      { username: player2Username, isBot: player2IsBot },
+    ]);
   }
 
   makeMove(gameId: string, username: string, column: number): MoveResult {
@@ -72,20 +103,18 @@ export class GameManager {
       return { success: false, error: 'Game is not in progress' };
     }
 
-    const isPlayer1 = game.player1.username === username;
-    const isPlayer2 = game.player2.username === username;
-    
-    if (!isPlayer1 && !isPlayer2) {
-      return { success: false, error: 'Player not in this game' };
-    }
-
-    const expectedPlayer = game.currentTurn === CellValue.PLAYER1 ? game.player1.username : game.player2.username;
-    if (username !== expectedPlayer) {
+    const slot = cellValueToSlotIndex(game.currentTurn);
+    const expectedUsername = game.players[slot]?.username;
+    if (!expectedUsername || username !== expectedUsername) {
+      const inGame = game.players.some((p) => p.username === username);
+      if (!inGame) {
+        return { success: false, error: 'Player not in this game' };
+      }
       return { success: false, error: 'Not your turn' };
     }
 
     const result = GameLogic.makeMove(game.board, column, game.currentTurn);
-    
+
     if (!result.success) {
       return result;
     }
@@ -106,9 +135,14 @@ export class GameManager {
       moveNumber: game.moves.length,
     });
 
-    if (result.winner || result.isDraw) {
+    if (result.winningPlayer !== undefined || result.isDraw) {
       game.status = GameStatus.COMPLETED;
-      game.winner = result.winner === 'player1' ? game.player1.username : result.winner === 'player2' ? game.player2.username : null;
+      if (result.isDraw) {
+        game.winner = null;
+      } else {
+        const winSlot = cellValueToSlotIndex(result.winningPlayer!);
+        game.winner = game.players[winSlot]?.username ?? null;
+      }
       game.winReason = result.winReason!;
       game.endedAt = new Date();
 
@@ -126,17 +160,15 @@ export class GameManager {
         totalMoves: game.moves.length,
       });
 
-      this.activeGames.delete(gameId);
-      this.playerToGame.delete(game.player1.username);
-      if (!game.player2.isBot) {
-        this.playerToGame.delete(game.player2.username);
-      }
-      
+      this.cleanupGameMaps(gameId, game);
       console.log(`🧹 Cleaned up game ${gameId} from active games`);
     } else {
-      game.currentTurn = game.currentTurn === CellValue.PLAYER1 ? CellValue.PLAYER2 : CellValue.PLAYER1;
+      const n = game.players.length;
+      const nextSlot = (slot + 1) % n;
+      game.currentTurn = slotIndexToCellValue(nextSlot);
 
-      if (game.currentTurn === CellValue.PLAYER2 && game.player2.isBot) {
+      const nextPlayer = game.players[nextSlot];
+      if (nextPlayer?.isBot) {
         setTimeout(() => this.makeBotMove(gameId), 1000);
       }
     }
@@ -157,12 +189,58 @@ export class GameManager {
     const game = this.activeGames.get(gameId);
     if (!game || game.status !== GameStatus.IN_PROGRESS) return;
 
-    const botService = new BotService(CellValue.PLAYER2);
+    const slot = cellValueToSlotIndex(game.currentTurn);
+    const bot = game.players[slot];
+    if (!bot?.isBot) return;
+
+    const botService = new BotService(game.currentTurn);
     const column = botService.getBestMove(game.board);
 
     if (column !== -1) {
-      this.makeMove(gameId, game.player2.username, column);
+      this.makeMove(gameId, bot.username, column);
     }
+  }
+
+  private cleanupGameMaps(gameId: string, game: GameState) {
+    this.activeGames.delete(gameId);
+    for (const p of game.players) {
+      if (!p.isBot) {
+        this.playerToGame.delete(p.username);
+      }
+    }
+  }
+
+  /**
+   * When a player fails to reconnect, assign win to the next human in seat order after them.
+   */
+  forfeitDisconnectedPlayer(gameId: string, disconnectedUsername: string): string | null {
+    const game = this.activeGames.get(gameId);
+    if (!game) return null;
+
+    const idx = game.players.findIndex((p) => p.username === disconnectedUsername);
+    if (idx === -1) return null;
+
+    let winner: string | null = null;
+    for (let k = 1; k < game.players.length; k++) {
+      const p = game.players[(idx + k) % game.players.length];
+      if (!p.isBot) {
+        winner = p.username;
+        break;
+      }
+    }
+
+    game.status = GameStatus.COMPLETED;
+    game.winner = winner;
+    game.winReason = WinReason.OPPONENT_DISCONNECT;
+    game.endedAt = new Date();
+
+    if (wsService) {
+      wsService.emitGameEnd(gameId, winner, WinReason.OPPONENT_DISCONNECT);
+    }
+
+    this.saveGameToDatabase(game).catch((e) => console.error(e));
+    this.cleanupGameMaps(gameId, game);
+    return winner;
   }
 
   getGame(gameId: string): GameState | undefined {
@@ -172,15 +250,15 @@ export class GameManager {
   getGameByPlayer(username: string): GameState | undefined {
     const gameId = this.playerToGame.get(username);
     if (!gameId) return undefined;
-    
+
     const game = this.activeGames.get(gameId);
-    
+
     if (!game) {
       console.log(`🧹 Cleaning up stale player mapping for ${username} (game ${gameId} no longer exists)`);
       this.playerToGame.delete(username);
       return undefined;
     }
-    
+
     return game;
   }
 
@@ -193,16 +271,22 @@ export class GameManager {
 
   private async saveGameToDatabase(game: GameState) {
     try {
+      const p0 = game.players[0];
+      const p1 = game.players[1] ?? p0;
       await Game.create({
         gameId: game.id,
         player1: {
-          username: game.player1.username,
-          isBot: game.player1.isBot,
+          username: p0.username,
+          isBot: p0.isBot,
         },
         player2: {
-          username: game.player2.username,
-          isBot: game.player2.isBot,
+          username: p1.username,
+          isBot: p1.isBot,
         },
+        allPlayers: game.players.map((p) => ({
+          username: p.username,
+          isBot: p.isBot,
+        })),
         board: game.board,
         status: game.status,
         winner: game.winner,

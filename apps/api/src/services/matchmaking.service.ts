@@ -57,7 +57,7 @@ export class MatchmakingService {
     if (player1.timeoutId) clearTimeout(player1.timeoutId);
     if (player2.timeoutId) clearTimeout(player2.timeoutId);
 
-    gameManager.createGame(player1.username, player2.username, false);
+    gameManager.createTwoPlayerGame(player1.username, player2.username, false);
 
     console.log(`🎮 Matched ${player1.username} with ${player2.username}`);
   }
@@ -74,7 +74,7 @@ export class MatchmakingService {
     const adjectives = ['Swift', 'Clever', 'Mighty', 'Shadow', 'Golden', 'Crystal', 'Thunder', 'Lunar', 'Cosmic', 'Blazing'];
     const nouns = ['Fox', 'Wolf', 'Dragon', 'Phoenix', 'Titan', 'Ninja', 'Knight', 'Wizard', 'Falcon', 'Panther'];
     const botName = `${adjectives[Math.floor(Math.random() * adjectives.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}`;
-    gameManager.createGame(username, botName, true);
+    gameManager.createTwoPlayerGame(username, botName, true);
 
     console.log(`🤖 Started bot game for ${username} vs ${botName}`);
   }

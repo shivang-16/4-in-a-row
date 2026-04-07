@@ -731,6 +731,176 @@
   box-sizing: border-box;
 }
 
+.player3 {
+  background: linear-gradient(145deg, #ff6b6b, #c92a2a);
+  border: 3px solid #ff8787;
+  box-sizing: border-box;
+}
+
+.player4 {
+  background: linear-gradient(145deg, #a855f7, #6b21a8);
+  border: 3px solid #d8b4fe;
+  box-sizing: border-box;
+}
+
+.player5 {
+  background: linear-gradient(145deg, #22c55e, #14532d);
+  border: 3px solid #86efac;
+  box-sizing: border-box;
+}
+
+.player6 {
+  background: linear-gradient(145deg, #f97316, #9a3412);
+  border: 3px solid #fdba74;
+  box-sizing: border-box;
+}
+
+.player7 {
+  background: linear-gradient(145deg, #ec4899, #9d174d);
+  border: 3px solid #f9a8d4;
+  box-sizing: border-box;
+}
+
+.player8 {
+  background: linear-gradient(145deg, #e5e7eb, #4b5563);
+  border: 3px solid #f3f4f6;
+  box-sizing: border-box;
+}
+
+.p3Floating {
+  background: linear-gradient(145deg, #ff6b6b, #c92a2a);
+  border: 2px solid #ff8787;
+}
+.p4Floating {
+  background: linear-gradient(145deg, #a855f7, #6b21a8);
+  border: 2px solid #d8b4fe;
+}
+.p5Floating {
+  background: linear-gradient(145deg, #22c55e, #14532d);
+  border: 2px solid #86efac;
+}
+.p6Floating {
+  background: linear-gradient(145deg, #f97316, #9a3412);
+  border: 2px solid #fdba74;
+}
+.p7Floating {
+  background: linear-gradient(145deg, #ec4899, #9d174d);
+  border: 2px solid #f9a8d4;
+}
+.p8Floating {
+  background: linear-gradient(145deg, #e5e7eb, #4b5563);
+  border: 2px solid #9ca3af;
+}
+
+/* Dynamic board: cell size set via --cell-size / --board-gap on .boardWrapper */
+.boardScale .cell {
+  width: var(--cell-size, 85px);
+  height: var(--cell-size, 85px);
+}
+
+.boardScale .row {
+  gap: var(--board-gap, 10px);
+}
+
+.boardScale .board {
+  gap: var(--board-gap, 10px);
+  padding: clamp(8px, 2vw, 20px);
+}
+
+.boardScale .floatingDisc {
+  width: min(72px, calc(var(--cell-size, 72px) * 0.85));
+  height: min(72px, calc(var(--cell-size, 72px) * 0.85));
+}
+
+.boardScale .hoverRow {
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.sidebarWide {
+  width: min(240px, 32vw);
+  max-height: 100vh;
+  overflow-y: auto;
+  justify-content: flex-start;
+  padding-top: 16px;
+}
+
+.playersRoster {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 0 8px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.rosterRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.rosterSwatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+.rosterCurrent {
+  color: #fde68a;
+  text-shadow: 0 0 8px rgba(250, 204, 21, 0.6);
+}
+
+.maxPlayersRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.maxPlayersLabel {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  text-align: center;
+}
+
+.maxPlayersSelect {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 2px solid rgba(160, 68, 255, 0.5);
+  background: rgba(15, 5, 24, 0.85);
+  color: #fff;
+  font-family: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.lobbyPlayerList {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  text-align: left;
+  width: 100%;
+  max-width: 280px;
+}
+
+.lobbyPlayerList li {
+  padding: 6px 10px;
+  margin: 4px 0;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
 /* Winning Disc Highlight */
 .winningDisc {
   animation: winPulse 0.8s ease-in-out infinite;

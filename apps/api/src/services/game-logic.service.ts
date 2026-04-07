@@ -9,18 +9,25 @@ import {
 } from '../types/game';
 
 export class GameLogic {
-  static createEmptyBoard(): Board {
-    return Array(ROWS)
+  private static dims(board: Board): { rows: number; cols: number } {
+    const rows = board.length;
+    const cols = board[0]?.length ?? 0;
+    return { rows, cols };
+  }
+
+  static createEmptyBoard(rows: number = ROWS, cols: number = COLS): Board {
+    return Array(rows)
       .fill(null)
-      .map(() => Array(COLS).fill(CellValue.EMPTY));
+      .map(() => Array(cols).fill(CellValue.EMPTY));
   }
 
   static dropDisc(board: Board, column: number, player: CellValue): number {
-    if (column < 0 || column >= COLS) {
+    const { rows, cols } = this.dims(board);
+    if (column < 0 || column >= cols) {
       return -1;
     }
 
-    for (let row = ROWS - 1; row >= 0; row--) {
+    for (let row = rows - 1; row >= 0; row--) {
       if (board[row][column] === CellValue.EMPTY) {
         board[row][column] = player;
         return row;
@@ -57,34 +64,15 @@ export class GameLogic {
     return null;
   }
 
-  private static checkDirection(
-    board: Board,
-    row: number,
-    col: number,
-    rowDir: number,
-    colDir: number,
-    player: CellValue
-  ): boolean {
-    let count = 1;
-
-    count += this.countInDirection(board, row, col, rowDir, colDir, player);
-    count += this.countInDirection(board, row, col, -rowDir, -colDir, player);
-
-    const isWin = count >= 4;
-    if (count >= 3) {
-      console.log(`🔍 Win check at (${row},${col}): direction(${rowDir},${colDir}) = ${count} discs, isWin: ${isWin}`);
-    }
-
-    return isWin;
-  }
-
   private static countInDirection(
     board: Board,
     row: number,
     col: number,
     rowDir: number,
     colDir: number,
-    player: CellValue
+    player: CellValue,
+    rows: number,
+    cols: number
   ): number {
     let count = 0;
     let r = row + rowDir;
@@ -92,9 +80,9 @@ export class GameLogic {
 
     while (
       r >= 0 &&
-      r < ROWS &&
+      r < rows &&
       c >= 0 &&
-      c < COLS &&
+      c < cols &&
       board[r][c] === player
     ) {
       count++;
@@ -113,37 +101,38 @@ export class GameLogic {
     colDir: number,
     player: CellValue
   ): Position[] | null {
+    const { rows, cols } = this.dims(board);
     const cells: Position[] = [{ row, col }];
-    
+
     let r = row + rowDir;
     let c = col + colDir;
     while (
-      r >= 0 && r < ROWS &&
-      c >= 0 && c < COLS &&
+      r >= 0 && r < rows &&
+      c >= 0 && c < cols &&
       board[r][c] === player
     ) {
       cells.push({ row: r, col: c });
       r += rowDir;
       c += colDir;
     }
-    
+
     r = row - rowDir;
     c = col - colDir;
     while (
-      r >= 0 && r < ROWS &&
-      c >= 0 && c < COLS &&
+      r >= 0 && r < rows &&
+      c >= 0 && c < cols &&
       board[r][c] === player
     ) {
       cells.push({ row: r, col: c });
       r -= rowDir;
       c -= colDir;
     }
-    
+
     if (cells.length >= 4) {
       console.log(`🏆 Winning cells found: ${cells.length} cells in direction (${rowDir},${colDir})`);
       return cells;
     }
-    
+
     return null;
   }
 
@@ -156,8 +145,9 @@ export class GameLogic {
   }
 
   static getValidMoves(board: Board): number[] {
+    const { cols } = this.dims(board);
     const validMoves: number[] = [];
-    for (let col = 0; col < COLS; col++) {
+    for (let col = 0; col < cols; col++) {
       if (!this.isColumnFull(board, col)) {
         validMoves.push(col);
       }
@@ -170,7 +160,8 @@ export class GameLogic {
     column: number,
     player: CellValue
   ): MoveResult {
-    if (column < 0 || column >= COLS) {
+    const { cols } = this.dims(board);
+    if (column < 0 || column >= cols) {
       return { success: false, error: 'Invalid column' };
     }
 
@@ -190,7 +181,7 @@ export class GameLogic {
         row,
         winReason: winResult.winReason,
         winningCells: winResult.winningCells,
-        winner: player === CellValue.PLAYER1 ? 'player1' : 'player2',
+        winningPlayer: player,
       };
     }
 

@@ -11,6 +11,11 @@ export interface IGame extends Document {
     username: string;
     isBot: boolean;
   };
+  /** Full participant list when more than two players */
+  allPlayers?: Array<{
+    username: string;
+    isBot: boolean;
+  }>;
   board: Board;
   status: GameStatus;
   winner: string | null;
@@ -42,6 +47,12 @@ const GameSchema = new Schema<IGame>(
       username: { type: String, required: true },
       isBot: { type: Boolean, default: false },
     },
+    allPlayers: [
+      {
+        username: { type: String, required: true },
+        isBot: { type: Boolean, default: false },
+      },
+    ],
     board: {
       type: [[Number]],
       required: true,

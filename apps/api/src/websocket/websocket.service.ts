@@ -4,13 +4,20 @@ import { kafkaService } from '../services/kafka.service';
 import { GameEventType } from '../types/events';
 import { matchmakingService } from '../services/matchmaking.service';
 import { gameManager } from '../services/game-manager.service';
-import { WinReason, GameStatus, Position } from '../types/game';
+import { Position, MAX_PLAYERS_PER_GAME, GameState } from '../types/game';
 
 export class WebSocketService {
   private io: SocketIOServer;
   private connectedPlayers: Map<string, Socket> = new Map();
-  // Private rooms for "Play with Friend" feature: roomCode -> { hostUsername, hostSocket }
-  private privateRooms: Map<string, { hostUsername: string; hostSocket: Socket }> = new Map();
+  /** Private lobby: host + invited players join until maxPlayers, then a game starts */
+  private privateRooms: Map<
+    string,
+    {
+      hostUsername: string;
+      maxPlayers: number;
+      members: Map<string, Socket>;
+    }
+  > = new Map();
 
   constructor(httpServer: HTTPServer) {
     // Define allowed origins
@@ -79,73 +86,145 @@ export class WebSocketService {
         const adjectives = ['Swift', 'Clever', 'Mighty', 'Shadow', 'Golden', 'Crystal', 'Thunder', 'Lunar', 'Cosmic', 'Blazing'];
         const nouns = ['Fox', 'Wolf', 'Dragon', 'Phoenix', 'Titan', 'Ninja', 'Knight', 'Wizard', 'Falcon', 'Panther'];
         const botName = `${adjectives[Math.floor(Math.random() * adjectives.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}`;
-        gameManager.createGame(data.username, botName, true);
+        gameManager.createTwoPlayerGame(data.username, botName, true);
       });
 
       // Handle creating a private room (Play with Friend)
-      socket.on('room:create', (data: { username: string }) => {
+      socket.on('room:create', (data: { username: string; maxPlayers?: number }) => {
         const { username } = data;
-        
+        const raw = data.maxPlayers ?? 2;
+        const maxPlayers = Math.min(MAX_PLAYERS_PER_GAME, Math.max(2, Math.floor(raw)));
+
         // IMPORTANT: Remove player from matchmaking queue if they were there
-        // Private rooms and random matchmaking are completely separate
         matchmakingService.leaveQueue(username);
-        
-        // Generate a 6-character uppercase alphanumeric room code
+
         const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-        
-        // Store the room with host info
-        this.privateRooms.set(roomCode, { hostUsername: username, hostSocket: socket });
+        const members = new Map<string, Socket>();
+        members.set(username, socket);
+
+        this.privateRooms.set(roomCode, { hostUsername: username, maxPlayers, members });
         socket.data.roomCode = roomCode;
-        
-        console.log(`🏠 Room created: ${roomCode} by ${username}`);
-        
-        // Send room code back to the host
-        socket.emit('room:created', { roomCode });
+        socket.data.waitingRoomCode = roomCode;
+        socket.join(`waiting-${roomCode}`);
+
+        console.log(`🏠 Room created: ${roomCode} by ${username} (max ${maxPlayers} players)`);
+
+        socket.emit('room:created', { roomCode, maxPlayers, players: [username] });
+        this.io.to(`waiting-${roomCode}`).emit('room:lobbyUpdate', {
+          players: [...members.keys()],
+          maxPlayers,
+        });
       });
 
       // Handle joining a private room
       socket.on('room:join', (data: { username: string; roomCode: string }) => {
         const { username, roomCode } = data;
         const normalizedCode = roomCode.toUpperCase().trim();
-        
+
         const room = this.privateRooms.get(normalizedCode);
-        
+
         if (!room) {
           socket.emit('room:error', { message: 'Room not found. Please check the code and try again.' });
           return;
         }
-        
+
         if (room.hostUsername === username) {
           socket.emit('room:error', { message: 'You cannot join your own room!' });
           return;
         }
-        
-        console.log(`🤝 ${username} joining room ${normalizedCode} hosted by ${room.hostUsername}`);
-        
-        // Remove the room from waiting rooms
-        this.privateRooms.delete(normalizedCode);
-        
-        // Clear room code from host's socket data
-        room.hostSocket.data.roomCode = null;
-        
-        // IMPORTANT: Remove both players from matchmaking queue (just in case)
-        matchmakingService.leaveQueue(room.hostUsername);
+
+        if (room.members.has(username)) {
+          room.members.set(username, socket);
+          socket.data.waitingRoomCode = normalizedCode;
+          socket.join(`waiting-${normalizedCode}`);
+          socket.emit('room:joinPending', {
+            roomCode: normalizedCode,
+            players: [...room.members.keys()],
+            maxPlayers: room.maxPlayers,
+          });
+          return;
+        }
+
+        if (room.members.size >= room.maxPlayers) {
+          socket.emit('room:error', { message: 'This room is full.' });
+          return;
+        }
+
+        console.log(`🤝 ${username} joining room ${normalizedCode} (${room.members.size + 1}/${room.maxPlayers})`);
+
         matchmakingService.leaveQueue(username);
-        
-        // Create the game between host and joiner
-        gameManager.createGame(room.hostUsername, username, false);
-        
-        console.log(`🎮 Private game started: ${room.hostUsername} vs ${username}`);
+        room.members.set(username, socket);
+        socket.data.waitingRoomCode = normalizedCode;
+        socket.join(`waiting-${normalizedCode}`);
+
+        const playerList = [...room.members.keys()];
+        this.io.to(`waiting-${normalizedCode}`).emit('room:lobbyUpdate', {
+          players: playerList,
+          maxPlayers: room.maxPlayers,
+        });
+
+        if (playerList.length < room.maxPlayers) {
+          socket.emit('room:joinPending', {
+            roomCode: normalizedCode,
+            players: playerList,
+            maxPlayers: room.maxPlayers,
+          });
+          return;
+        }
+
+        for (const u of playerList) {
+          matchmakingService.leaveQueue(u);
+        }
+
+        this.privateRooms.delete(normalizedCode);
+        for (const s of room.members.values()) {
+          s.data.roomCode = null;
+          s.data.waitingRoomCode = null;
+          s.leave(`waiting-${normalizedCode}`);
+        }
+
+        const participants = playerList.map((u) => ({ username: u, isBot: false }));
+        gameManager.createGame(participants, { isInviteGame: true });
+        console.log(`🎮 Private game started: ${playerList.join(', ')}`);
       });
 
-      // Handle leaving/canceling a private room
+      // Handle leaving/canceling a private room (host closes lobby or guest leaves while waiting)
       socket.on('room:leave', () => {
-        const roomCode = socket.data.roomCode;
-        if (roomCode && this.privateRooms.has(roomCode)) {
-          this.privateRooms.delete(roomCode);
+        const roomCode = socket.data.roomCode as string | undefined;
+        const waitingCode = socket.data.waitingRoomCode as string | undefined;
+        const code = roomCode || waitingCode;
+        if (!code || !this.privateRooms.has(code)) {
           socket.data.roomCode = null;
-          console.log(`🚪 Room ${roomCode} closed by host`);
+          socket.data.waitingRoomCode = null;
+          return;
         }
+
+        const room = this.privateRooms.get(code)!;
+        const username = socket.data.username as string;
+
+        if (room.hostUsername === username) {
+          this.privateRooms.delete(code);
+          this.io.to(`waiting-${code}`).emit('room:closed', { reason: 'Host left the lobby' });
+          for (const s of room.members.values()) {
+            s.data.roomCode = null;
+            s.data.waitingRoomCode = null;
+            s.leave(`waiting-${code}`);
+          }
+          room.members.clear();
+          console.log(`🚪 Room ${code} closed by host`);
+        } else {
+          room.members.delete(username);
+          socket.data.waitingRoomCode = null;
+          socket.leave(`waiting-${code}`);
+          const playerList = [...room.members.keys()];
+          this.io.to(`waiting-${code}`).emit('room:lobbyUpdate', {
+            players: playerList,
+            maxPlayers: room.maxPlayers,
+          });
+          console.log(`🚪 ${username} left waiting room ${code}`);
+        }
+
+        socket.data.roomCode = null;
       });
 
       // Handle game moves
@@ -177,53 +256,47 @@ export class WebSocketService {
         if (username) {
           this.connectedPlayers.delete(username);
           matchmakingService.leaveQueue(username);
-          
-          // Clean up any private room hosted by this player
-          const roomCode = socket.data.roomCode;
-          if (roomCode && this.privateRooms.has(roomCode)) {
-            this.privateRooms.delete(roomCode);
-            console.log(`🚪 Room ${roomCode} closed due to host disconnect`);
+
+          const waitingKey = (socket.data.waitingRoomCode || socket.data.roomCode) as string | undefined;
+          if (waitingKey && this.privateRooms.has(waitingKey)) {
+            const room = this.privateRooms.get(waitingKey)!;
+            if (room.hostUsername === username) {
+              this.privateRooms.delete(waitingKey);
+              this.io.to(`waiting-${waitingKey}`).emit('room:closed', { reason: 'Host disconnected' });
+              for (const s of room.members.values()) {
+                s.data.roomCode = null;
+                s.data.waitingRoomCode = null;
+                s.leave(`waiting-${waitingKey}`);
+              }
+              room.members.clear();
+              console.log(`🚪 Room ${waitingKey} closed due to host disconnect`);
+            } else {
+              room.members.delete(username);
+              const playerList = [...room.members.keys()];
+              this.io.to(`waiting-${waitingKey}`).emit('room:lobbyUpdate', {
+                players: playerList,
+                maxPlayers: room.maxPlayers,
+              });
+              console.log(`🚪 ${username} disconnected from waiting room ${waitingKey}`);
+            }
           }
-          
+
           console.log(`❌ Player disconnected: ${username}`);
-          
-          // Check if player was in a game
+
           const game = gameManager.getGameByPlayer(username);
           if (game) {
-            console.log(`⏰ Starting 30s reconnection timer for ${username} in game ${game.id}`);
-            
-            // Give player 30 seconds to reconnect
+            const gameId = game.id;
+            console.log(`⏰ Starting 30s reconnection timer for ${username} in game ${gameId}`);
+
             setTimeout(() => {
-              // Check if player reconnected
               const stillDisconnected = !this.connectedPlayers.has(username);
-              if (stillDisconnected && gameManager.getGame(game.id)) {
-                console.log(`⚠️  Player ${username} didn't reconnect. Forfeiting game ${game.id}`);
-                
-                // Determine winner (the other player)
-                const winner = game.player1.username === username ? game.player2.username : game.player1.username;
-                
-                // Update game state
-                game.status = GameStatus.COMPLETED;
-                game.winner = winner;
-                game.winReason = WinReason.OPPONENT_DISCONNECT;
-                game.endedAt = new Date();
-                
-                // Notify the remaining player
-                this.emitGameEnd(game.id, winner, 'Opponent disconnected');
-                
-                // Clean up
-                gameManager['activeGames'].delete(game.id);
-                gameManager['playerToGame'].delete(game.player1.username);
-                if (!game.player2.isBot) {
-                  gameManager['playerToGame'].delete(game.player2.username);
-                }
-                
-                console.log(`🧹 Cleaned up game ${game.id} due to disconnect timeout`);
+              if (stillDisconnected && gameManager.getGame(gameId)) {
+                console.log(`⚠️  Player ${username} didn't reconnect. Forfeiting game ${gameId}`);
+                gameManager.forfeitDisconnectedPlayer(gameId, username);
               }
-            }, 30000); // 30 seconds
+            }, 30000);
           }
-          
-          // Send Kafka event
+
           kafkaService.sendGameEvent(GameEventType.PLAYER_DISCONNECTED, {
             username,
             socketId: socket.id,
@@ -273,48 +346,52 @@ export class WebSocketService {
     });
   }
 
-  // Emit game start event to both players
-  public emitGameStart(gameId: string, player1: string, player2: string, isBot: boolean) {
-    const player1Socket = this.connectedPlayers.get(player1);
-    const player2Socket = this.connectedPlayers.get(player2);
+  /** Notifies each human participant and joins them to the Socket.IO game room */
+  public emitGameStart(game: GameState) {
+    const gameId = game.id;
+    const players = game.players;
+    const usernames = players.map((p) => p.username);
+    const isBotGame = players.some((p) => p.isBot);
 
-    console.log(`🎮 Emitting game start to ${player1} and ${player2}`);
+    console.log(`🎮 Emitting game start to ${usernames.join(', ')} (${game.rows}×${game.cols})`);
 
-    if (player1Socket) {
-      player1Socket.join(gameId);
-      player1Socket.emit('game:started', {
+    players.forEach((p, index) => {
+      if (p.isBot) return;
+      const sock = this.connectedPlayers.get(p.username);
+      if (!sock) {
+        console.warn(`⚠️  Player ${p.username} socket not found`);
+        return;
+      }
+      sock.join(gameId);
+      const others = usernames.filter((u) => u !== p.username);
+      sock.emit('game:started', {
         gameId,
-        opponent: player2,
-        isBot,
-        yourTurn: true,
+        board: game.board,
+        rows: game.rows,
+        cols: game.cols,
+        players: usernames,
+        playerUsernames: usernames,
+        yourPlayerNumber: index + 1,
+        playerCount: players.length,
+        isBot: isBotGame,
+        yourTurn: index === 0,
+        opponent: others.length === 1 ? others[0] : undefined,
+        isInviteGame: Boolean(game.isInviteGame),
       });
-      console.log(`✅ Sent game:started to ${player1} (player 1, goes first)`);
-    } else {
-      console.warn(`⚠️  Player ${player1} socket not found`);
-    }
-
-    if (player2Socket && !isBot) {
-      player2Socket.join(gameId);
-      player2Socket.emit('game:started', {
-        gameId,
-        opponent: player1,
-        isBot: false,
-        yourTurn: false,
-      });
-      console.log(`✅ Sent game:started to ${player2} (player 2, waits)`);
-    } else if (!isBot) {
-      console.warn(`⚠️  Player ${player2} socket not found`);
-    }
-
-    // Send Kafka event
-    kafkaService.sendGameEvent(GameEventType.GAME_STARTED, {
-      gameId,
-      player1,
-      player2,
-      isBot,
+      console.log(`✅ Sent game:started to ${p.username} (seat ${index + 1}/${players.length})`);
     });
 
-    console.log(`🎮 Game started: ${gameId} - ${player1} vs ${player2}${isBot ? ' (BOT)' : ''}`);
+    kafkaService.sendGameEvent(GameEventType.GAME_STARTED, {
+      gameId,
+      player1: usernames[0],
+      player2: usernames[1],
+      players: usernames,
+      isBot: isBotGame,
+      rows: game.rows,
+      cols: game.cols,
+    });
+
+    console.log(`🎮 Game started: ${gameId} - ${usernames.join(', ')}${isBotGame ? ' (BOT)' : ''}`);
   }
 
   // Emit game update to all players in the game

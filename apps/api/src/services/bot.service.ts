@@ -1,4 +1,4 @@
-import { Board, CellValue, COLS } from '../types/game';
+import { Board, CellValue } from '../types/game';
 import { GameLogic } from './game-logic.service';
 
 export class BotService {
@@ -36,7 +36,11 @@ export class BotService {
       return strategicMove;
     }
 
-    const centerMoves = validMoves.filter((col) => col >= 2 && col <= 4);
+    const cols = board[0]?.length ?? 7;
+    const mid = (cols - 1) / 2;
+    const centerMoves = validMoves.filter(
+      (col) => col >= Math.max(0, Math.floor(mid - 1)) && col <= Math.min(cols - 1, Math.ceil(mid + 1))
+    );
     if (centerMoves.length > 0) {
       const move = centerMoves[Math.floor(Math.random() * centerMoves.length)];
       console.log('🤖 Bot: Choosing center column', move);
@@ -49,7 +53,8 @@ export class BotService {
   }
 
   private findWinningMove(board: Board, player: CellValue): number {
-    for (let col = 0; col < COLS; col++) {
+    const cols = board[0]?.length ?? 7;
+    for (let col = 0; col < cols; col++) {
       if (GameLogic.isColumnFull(board, col)) continue;
 
       const testBoard = GameLogic.cloneBoard(board);
@@ -66,9 +71,10 @@ export class BotService {
   }
 
   private findStrategicMove(board: Board): number {
+    const cols = board[0]?.length ?? 7;
     const strategicScores: { col: number; score: number }[] = [];
 
-    for (let col = 0; col < COLS; col++) {
+    for (let col = 0; col < cols; col++) {
       if (GameLogic.isColumnFull(board, col)) continue;
 
       const testBoard = GameLogic.cloneBoard(board);
@@ -120,13 +126,14 @@ export class BotService {
   ): number {
     let count = 1;
 
+    const numCols = board[0]?.length ?? 7;
     let r = row + rowDir;
     let c = col + colDir;
     while (
       r >= 0 &&
       r < board.length &&
       c >= 0 &&
-      c < COLS &&
+      c < numCols &&
       board[r][c] === player
     ) {
       count++;
@@ -140,7 +147,7 @@ export class BotService {
       r >= 0 &&
       r < board.length &&
       c >= 0 &&
-      c < COLS &&
+      c < numCols &&
       board[r][c] === player
     ) {
       count++;
