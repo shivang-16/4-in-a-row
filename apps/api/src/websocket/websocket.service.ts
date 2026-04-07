@@ -19,6 +19,10 @@ export class WebSocketService {
     }
   > = new Map();
 
+  /** Invite-game rematch: same partyId across games until everyone votes to play again */
+  private rematchPlayers: Map<string, string[]> = new Map();
+  private rematchVotes: Map<string, Set<string>> = new Map();
+
   constructor(httpServer: HTTPServer) {
     // Define allowed origins
     const allowedOrigins = [
@@ -292,7 +296,7 @@ export class WebSocketService {
               const stillDisconnected = !this.connectedPlayers.has(username);
               if (stillDisconnected && gameManager.getGame(gameId)) {
                 console.log(`⚠️  Player ${username} didn't reconnect. Forfeiting game ${gameId}`);
-                gameManager.forfeitDisconnectedPlayer(gameId, username);
+                gameManager.removeDisconnectedPlayerFromGame(gameId, username);
               }
             }, 30000);
           }
@@ -333,6 +337,55 @@ export class WebSocketService {
         });
       });
       
+      socket.on('party:rematch', (data: { partyId: string }) => {
+        const username = socket.data.username as string | undefined;
+        const partyId = data?.partyId;
+        if (!username || !partyId) return;
+
+        const players = this.rematchPlayers.get(partyId);
+        if (!players?.length || !players.includes(username)) {
+          socket.emit('game:error', { message: 'Rematch is not available for this game.' });
+          return;
+        }
+
+        if (!this.rematchVotes.has(partyId)) {
+          this.rematchVotes.set(partyId, new Set());
+        }
+        const votes = this.rematchVotes.get(partyId)!;
+        votes.add(username);
+        this.broadcastRematchProgress(partyId);
+
+        if (votes.size < players.length) return;
+
+        const offline = players.filter((u) => !this.connectedPlayers.has(u));
+        if (offline.length > 0) {
+          votes.clear();
+          for (const u of players) {
+            this.connectedPlayers.get(u)?.emit('rematch:error', {
+              message: 'Everyone must be connected to rematch.',
+            });
+          }
+          return;
+        }
+
+        this.rematchVotes.delete(partyId);
+        this.rematchPlayers.delete(partyId);
+
+        try {
+          gameManager.createGame(
+            players.map((u) => ({ username: u, isBot: false })),
+            { isInviteGame: true, partyId }
+          );
+        } catch (e) {
+          console.error('Rematch failed:', e);
+          for (const u of players) {
+            this.connectedPlayers.get(u)?.emit('rematch:error', {
+              message: 'Could not start rematch.',
+            });
+          }
+        }
+      });
+
       // Handle chat messages
       socket.on('chat:send', (data: { gameId: string; username: string; message: string }) => {
         const { gameId, message } = data;
@@ -377,6 +430,9 @@ export class WebSocketService {
         yourTurn: index === 0,
         opponent: others.length === 1 ? others[0] : undefined,
         isInviteGame: Boolean(game.isInviteGame),
+        partyId: game.partyId,
+        scoringMode: Boolean(game.scoringMode),
+        scores: game.scoringMode ? game.scores : undefined,
       });
       console.log(`✅ Sent game:started to ${p.username} (seat ${index + 1}/${players.length})`);
     });
@@ -400,17 +456,55 @@ export class WebSocketService {
     this.io.to(gameId).emit('game:update', data);
   }
 
+  public registerInviteRematch(partyId: string, orderedHumanUsernames: string[]) {
+    if (!partyId || orderedHumanUsernames.length < 2) return;
+    this.rematchPlayers.set(partyId, [...orderedHumanUsernames]);
+    this.rematchVotes.set(partyId, new Set());
+    console.log(`🔁 Rematch ready for party ${partyId}: ${orderedHumanUsernames.join(', ')}`);
+  }
+
+  private broadcastRematchProgress(partyId: string) {
+    const players = this.rematchPlayers.get(partyId);
+    const votes = this.rematchVotes.get(partyId);
+    if (!players || !votes) return;
+    const payload = {
+      partyId,
+      votes: votes.size,
+      needed: players.length,
+      voted: [...votes],
+    };
+    for (const u of players) {
+      this.connectedPlayers.get(u)?.emit('rematch:progress', payload);
+    }
+  }
+
   // Emit game end event
-  public emitGameEnd(gameId: string, winner: string | null, reason: string, winningCells?: Position[]) {
+  public emitGameEnd(
+    gameId: string,
+    winner: string | null,
+    reason: string,
+    winningCells?: Position[],
+    rematch?: {
+      partyId?: string;
+      canRematch?: boolean;
+      rematchPlayers?: string[];
+      scores?: number[];
+      scoringMode?: boolean;
+    }
+  ) {
     this.io.to(gameId).emit('game:ended', {
       gameId,
       winner,
       reason,
       winningCells,
       timestamp: new Date().toISOString(),
+      partyId: rematch?.partyId,
+      canRematch: rematch?.canRematch,
+      rematchPlayers: rematch?.rematchPlayers,
+      scores: rematch?.scores,
+      scoringMode: rematch?.scoringMode,
     });
 
-    // Send Kafka event
     kafkaService.sendGameEvent(GameEventType.GAME_ENDED, {
       gameId,
       winner,

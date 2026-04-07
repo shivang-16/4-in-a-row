@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useMemo, type CSSProperties } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback, type CSSProperties } from 'react';
 import { io, Socket } from 'socket.io-client';
 import styles from './game.module.css';
 
@@ -16,12 +16,51 @@ function emptyBoard(rows: number, cols: number): Board {
     .map(() => Array(cols).fill(0));
 }
 
+/** Fits cell size + gaps inside width/height so large boards stay on screen (especially phones). */
+function computeBoardLayout(
+  cols: number,
+  rows: number,
+  viewportWidth: number,
+  viewportHeight: number
+): { cellSize: number; gap: number } {
+  const c = Math.max(1, cols);
+  const r = Math.max(1, rows);
+  const narrow = viewportWidth < 720;
+  /* Reserve space for fixed chat tab on the right (~65px + margin) */
+  const chatStrip = 78;
+  const outerPad = narrow ? 8 : 16;
+  const boardPadding = narrow ? 10 : 20;
+  const maxBoardWidth = Math.max(140, viewportWidth - chatStrip - outerPad * 2);
+  const innerW = maxBoardWidth - boardPadding * 2;
+
+  let gap = 4;
+  let cellSize = Math.floor((innerW - (c - 1) * gap) / c);
+  gap = Math.max(2, Math.min(10, Math.round(cellSize * 0.12)));
+  cellSize = Math.floor((innerW - (c - 1) * gap) / c);
+  cellSize = Math.max(12, Math.min(88, cellSize));
+  gap = Math.max(2, Math.min(10, Math.round(cellSize * 0.12)));
+
+  const statusReserve = narrow ? 120 : 100;
+  const hoverReserve = Math.min(72, Math.round(cellSize * 1.1) + 16);
+  const maxBoardHeight = Math.max(
+    160,
+    Math.min(viewportHeight * 0.58, viewportHeight - statusReserve - hoverReserve)
+  );
+  const innerH = maxBoardHeight - boardPadding * 2 - (r - 1) * gap;
+  const byHeight = Math.floor(innerH / r);
+  if (byHeight > 0 && byHeight < cellSize) {
+    cellSize = Math.max(12, byHeight);
+    gap = Math.max(2, Math.min(10, Math.round(cellSize * 0.12)));
+  }
+
+  return { cellSize, gap };
+}
+
 export default function Home() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [username, setUsername] = useState('');
   const [gameId, setGameId] = useState<string | null>(null);
   const [board, setBoard] = useState<Board>(() => emptyBoard(DEFAULT_ROWS, DEFAULT_COLS));
-  const [hoveredCol, setHoveredCol] = useState<number | null>(null);
   const [myPlayerNumber, setMyPlayerNumber] = useState<number | null>(null);
   const [currentTurn, setCurrentTurn] = useState(1);
   const [opponent, setOpponent] = useState('');
@@ -32,6 +71,9 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
   const [gameMode, setGameMode] = useState<'pvp' | 'bot' | 'friend' | null>(null);
   const [moveCount, setMoveCount] = useState(0);
+  /** 3+ players: count 4-in-a-rows until board is full */
+  const [scoringMode, setScoringMode] = useState(false);
+  const [scores, setScores] = useState<number[]>([]);
   
   // Chat states
   const [chatMessages, setChatMessages] = useState<Array<{username: string, message: string, timestamp: Date}>>([]);
@@ -49,6 +91,10 @@ export default function Home() {
   // Refs for tracking state in socket event handlers
   const chatOpenRef = useRef(chatOpen);
   const usernameRef = useRef(username);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const hoverStripRef = useRef<HTMLDivElement>(null);
+  /** Preview disc position in the strip above the board (tracks pointer X, clamped to columns). */
+  const [pointerPreview, setPointerPreview] = useState<{ x: number; y: number } | null>(null);
   
   // Keep refs in sync with state
   useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
@@ -68,6 +114,12 @@ export default function Home() {
   const [friendMaxPlayers, setFriendMaxPlayers] = useState(2);
   const [lobbyPlayers, setLobbyPlayers] = useState<string[]>([]);
   const [codeCopied, setCodeCopied] = useState(false);
+
+  /** Invite / friend games: rematch with same players without a new room code */
+  const [invitePartyId, setInvitePartyId] = useState<string | null>(null);
+  const [rematchVotes, setRematchVotes] = useState(0);
+  const [rematchNeeded, setRematchNeeded] = useState(0);
+  const [hasVotedRematch, setHasVotedRematch] = useState(false);
   
   // UI feedback states
   const [usernameShake, setUsernameShake] = useState(false);
@@ -75,14 +127,33 @@ export default function Home() {
   // Winning cells state
   const [winningCells, setWinningCells] = useState<Array<{row: number, col: number}>>([]);
 
+  const [viewport, setViewport] = useState({ width: 390, height: 740 });
+
+  useEffect(() => {
+    const read = () => {
+      const vv = window.visualViewport;
+      setViewport({
+        width: vv?.width ?? window.innerWidth,
+        height: vv?.height ?? window.innerHeight,
+      });
+    };
+    read();
+    window.addEventListener('resize', read);
+    window.visualViewport?.addEventListener('resize', read);
+    window.visualViewport?.addEventListener('scroll', read);
+    return () => {
+      window.removeEventListener('resize', read);
+      window.visualViewport?.removeEventListener('resize', read);
+      window.visualViewport?.removeEventListener('scroll', read);
+    };
+  }, []);
+
   const boardCols = board[0]?.length ?? DEFAULT_COLS;
   const boardRows = board.length;
-  const boardLayout = useMemo(() => {
-    const m = Math.max(boardRows, boardCols);
-    const cellSize = Math.max(26, Math.min(88, Math.floor(560 / m)));
-    const gap = Math.max(4, Math.round(cellSize * 0.12));
-    return { cellSize, gap };
-  }, [boardRows, boardCols]);
+  const boardLayout = useMemo(
+    () => computeBoardLayout(boardCols, boardRows, viewport.width, viewport.height),
+    [boardCols, boardRows, viewport.width, viewport.height]
+  );
 
   const discClasses = useMemo(
     () => [
@@ -136,6 +207,9 @@ export default function Home() {
       yourTurn: boolean;
       isBot: boolean;
       isInviteGame?: boolean;
+      partyId?: string;
+      scoringMode?: boolean;
+      scores?: number[];
     }) => {
       console.log('🎮 Game started:', data);
       setGameId(data.gameId);
@@ -162,42 +236,118 @@ export default function Home() {
       if (data.isBot) setGameMode('bot');
       else if (data.isInviteGame) setGameMode('friend');
       else setGameMode('pvp');
+      if (data.partyId) setInvitePartyId(data.partyId);
+      setHasVotedRematch(false);
+      setRematchVotes(0);
+      setRematchNeeded(0);
+      setScoringMode(Boolean(data.scoringMode));
+      setScores(Array.isArray(data.scores) ? data.scores : []);
       console.log(`✅ Seat ${data.yourPlayerNumber}, isBot: ${data.isBot}`);
     });
 
-    newSocket.on('game:update', (data) => {
+    newSocket.on(
+      'game:update',
+      (data: {
+        board?: Board;
+        currentTurn?: number;
+        scores?: number[];
+        scoringMode?: boolean;
+        playerUsernames?: string[];
+        playerLeft?: string;
+        lastMove?: { player: string; column: number; row: number };
+      }) => {
       console.log('📥 Game update:', data);
       if (data.board) {
         setBoard(data.board);
-        setMoveCount(prev => prev + 1);
-        
-        // Play drop sound on every move
-        if (dropSoundRef.current) {
-          dropSoundRef.current.currentTime = 0;
-          dropSoundRef.current.play().catch((e: any) => console.log('Drop sound failed:', e));
+        if (data.lastMove) {
+          setMoveCount((prev) => prev + 1);
+          if (dropSoundRef.current) {
+            dropSoundRef.current.currentTime = 0;
+            dropSoundRef.current.play().catch((e: any) => console.log('Drop sound failed:', e));
+          }
+        }
+      }
+      if (data.playerUsernames && data.playerUsernames.length > 0) {
+        setPlayerUsernames(data.playerUsernames);
+        const u = usernameRef.current;
+        if (u) {
+          const idx = data.playerUsernames.indexOf(u);
+          if (idx >= 0) setMyPlayerNumber(idx + 1);
+        }
+        if (data.playerUsernames.length === 2) {
+          setOpponent(data.playerUsernames.find((x) => x !== usernameRef.current) ?? '');
+        } else {
+          setOpponent('');
         }
       }
       if (data.currentTurn !== undefined) {
         setCurrentTurn(data.currentTurn);
       }
+      if (data.scoringMode !== undefined) {
+        setScoringMode(data.scoringMode);
+      }
+      if (data.scores && Array.isArray(data.scores)) {
+        setScores(data.scores);
+      }
     });
 
-    newSocket.on('game:ended', (data) => {
-      console.log('🏁 Game ended:', data);
-      setGameStatus('ended');
-      setWinner(data.winner);
-      setWinReason(data.reason);
-      
-      // Set winning cells for highlighting
-      if (data.winningCells) {
-        setWinningCells(data.winningCells);
+    newSocket.on(
+      'game:ended',
+      (data: {
+        winner: string | null;
+        reason: string;
+        winningCells?: Array<{ row: number; col: number }>;
+        partyId?: string;
+        canRematch?: boolean;
+        rematchPlayers?: string[];
+        scores?: number[];
+        scoringMode?: boolean;
+      }) => {
+        console.log('🏁 Game ended:', data);
+        setGameStatus('ended');
+        setWinner(data.winner);
+        setWinReason(data.reason);
+        if (data.scoringMode !== undefined) setScoringMode(data.scoringMode);
+        if (data.scores && Array.isArray(data.scores)) setScores(data.scores);
+
+        if (data.winningCells) {
+          setWinningCells(data.winningCells);
+        }
+
+        if (data.canRematch && data.partyId) {
+          setInvitePartyId(data.partyId);
+          setRematchNeeded(data.rematchPlayers?.length ?? 0);
+          setRematchVotes(0);
+          setHasVotedRematch(false);
+        } else {
+          setInvitePartyId(null);
+          setRematchNeeded(0);
+          setRematchVotes(0);
+          setHasVotedRematch(false);
+        }
+
+        if (gameEndSoundRef.current) {
+          gameEndSoundRef.current.currentTime = 0;
+          gameEndSoundRef.current.play().catch((e: any) => console.log('Sound play failed:', e));
+        }
       }
-      
-      // Play game end sound
-      if (gameEndSoundRef.current) {
-         gameEndSoundRef.current.currentTime = 0;
-         gameEndSoundRef.current.play().catch((e: any) => console.log('Sound play failed:', e));
+    );
+
+    newSocket.on(
+      'rematch:progress',
+      (data: { votes: number; needed: number; voted?: string[] }) => {
+        setRematchVotes(data.votes);
+        setRematchNeeded(data.needed);
+        const me = usernameRef.current;
+        if (me && data.voted?.includes(me)) {
+          setHasVotedRematch(true);
+        }
       }
+    );
+
+    newSocket.on('rematch:error', (data: { message?: string }) => {
+      setHasVotedRematch(false);
+      alert(data.message ?? 'Rematch failed.');
     });
     
     // Chat event
@@ -294,16 +444,6 @@ export default function Home() {
       }
     }
   }, [bgMusicEnabled]);
-
-  const handleMouseEnter = (col: number) => {
-    if (gameStatus === 'playing') {
-      setHoveredCol(col);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    setHoveredCol(null);
-  };
 
   const handleJoinPvP = () => {
     if (!username.trim()) {
@@ -405,7 +545,7 @@ export default function Home() {
     socket.emit('game:move', { gameId, column: col });
   };
 
-  const handlePlayAgain = () => {
+  const resetToMainMenu = () => {
     setGameStatus('menu');
     setBoard(emptyBoard(DEFAULT_ROWS, DEFAULT_COLS));
     setWinner(null);
@@ -423,6 +563,25 @@ export default function Home() {
     setLobbyPlayers([]);
     setFriendJoinWaiting(false);
     setRoomMaxPlayers(2);
+    setInvitePartyId(null);
+    setRematchVotes(0);
+    setRematchNeeded(0);
+    setHasVotedRematch(false);
+    setScoringMode(false);
+    setScores([]);
+  };
+
+  const handlePlayAgain = () => {
+    if (invitePartyId && socket && gameMode === 'friend') {
+      socket.emit('party:rematch', { partyId: invitePartyId });
+      setHasVotedRematch(true);
+      return;
+    }
+    resetToMainMenu();
+  };
+
+  const handleLeaveToMenu = () => {
+    resetToMainMenu();
   };
   
   const handleSendChat = () => {
@@ -453,8 +612,90 @@ export default function Home() {
   const iAmWinner = winner === username;
   const isDraw = winReason === 'draw';
 
+  const columnFromClientX = useCallback((clientX: number): number | null => {
+    const board = boardRef.current;
+    if (!board) return null;
+    const firstRow = board.querySelector('[data-board-row="0"]');
+    if (!firstRow) return null;
+    const cells = Array.from(firstRow.querySelectorAll<HTMLElement>('[data-col]'));
+    if (!cells.length) return null;
+    for (const cell of cells) {
+      const r = cell.getBoundingClientRect();
+      if (clientX >= r.left && clientX <= r.right) {
+        return Number(cell.dataset.col);
+      }
+    }
+    let best = 0;
+    let bestD = Infinity;
+    for (const cell of cells) {
+      const r = cell.getBoundingClientRect();
+      const cx = (r.left + r.right) / 2;
+      const d = Math.abs(clientX - cx);
+      if (d < bestD) {
+        bestD = d;
+        best = Number(cell.dataset.col);
+      }
+    }
+    return best;
+  }, []);
+
+  const handleBoardPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (gameStatus !== 'playing' || !isMyTurn || winner) {
+        setPointerPreview(null);
+        return;
+      }
+      const board = boardRef.current;
+      const strip = hoverStripRef.current;
+      if (!board) return;
+      const br = board.getBoundingClientRect();
+      const sr = strip?.getBoundingClientRect();
+      const left = sr ? Math.min(sr.left, br.left) : br.left;
+      const right = sr ? Math.max(sr.right, br.right) : br.right;
+      const top = sr ? sr.top : br.top;
+      const bottom = br.bottom;
+      if (
+        e.clientX < left ||
+        e.clientX > right ||
+        e.clientY < top ||
+        e.clientY > bottom
+      ) {
+        setPointerPreview(null);
+        return;
+      }
+      if (!strip) return;
+      const stripR = strip.getBoundingClientRect();
+      const firstRow = board.querySelector('[data-board-row="0"]');
+      if (!firstRow) return;
+      const cells = Array.from(firstRow.querySelectorAll<HTMLElement>('[data-col]'));
+      const firstEl = cells[0];
+      const lastEl = cells[cells.length - 1];
+      if (!firstEl || !lastEl) return;
+      const first = firstEl.getBoundingClientRect();
+      const last = lastEl.getBoundingClientRect();
+      const discPx = Math.min(72, boardLayout.cellSize * 0.85);
+      let x = e.clientX - stripR.left;
+      x = Math.max(first.left - stripR.left, Math.min(last.right - stripR.left, x));
+      const y = stripR.height / 2 - discPx / 2;
+      setPointerPreview({ x, y });
+    },
+    [gameStatus, isMyTurn, winner, boardLayout.cellSize]
+  );
+
+  const handleBoardPointerLeave = useCallback(() => {
+    setPointerPreview(null);
+  }, []);
+
+  useEffect(() => {
+    if (gameStatus !== 'playing') {
+      setPointerPreview(null);
+    }
+  }, [gameStatus]);
+
   const getWinReasonText = () => {
     if (isDraw) return 'Board Full - Draw!';
+    if (winReason === 'most_points') return 'Most 4-in-a-rows when board filled!';
+    if (winReason === 'score_tie') return 'Tied on 4-in-a-rows!';
     switch (winReason) {
       case 'horizontal': return '→ Horizontal Win!';
       case 'vertical': return '↓ Vertical Win!';
@@ -463,6 +704,19 @@ export default function Home() {
       case 'opponent_disconnect': return 'Opponent Disconnected';
       default: return '';
     }
+  };
+
+  const endGameHeadline = () => {
+    if (scoringMode && (winReason === 'most_points' || winReason === 'score_tie')) {
+      if (winReason === 'score_tie' || !winner) {
+        return 'TIE GAME!';
+      }
+      if (winner === username) return 'YOU WIN!';
+      return `${winner} WINS!`;
+    }
+    if (winner === username) return 'YOU WIN!';
+    if (winner) return `${winner} WINS!`;
+    return 'DRAW!';
   };
 
   return (
@@ -474,7 +728,7 @@ export default function Home() {
         {playerUsernames.length > 2 ? (
           <>
             <p className={styles.friendSectionTitle} style={{ marginBottom: 8 }}>
-              Players
+              Players{scoringMode ? ' · points' : ''}
             </p>
             <div className={styles.playersRoster}>
               {playerUsernames.map((name, i) => (
@@ -487,6 +741,9 @@ export default function Home() {
                   >
                     {name}
                     {name === username ? ' (you)' : ''}
+                    {scoringMode && (
+                      <span style={{ opacity: 0.85, marginLeft: 6 }}>· {scores[i] ?? 0} pts</span>
+                    )}
                   </span>
                 </div>
               ))}
@@ -560,7 +817,7 @@ export default function Home() {
 
             {/* Game Board Wrapper */}
             <div
-              className={`${styles.boardWrapper} ${boardRows > DEFAULT_ROWS || boardCols > DEFAULT_COLS ? styles.boardScale : ''}`}
+              className={`${styles.boardWrapper} ${gameStatus === 'playing' || gameStatus === 'ended' ? styles.boardScale : ''}`}
               style={
                 {
                   ['--cell-size']: `${boardLayout.cellSize}px`,
@@ -568,80 +825,130 @@ export default function Home() {
                 } as CSSProperties
               }
             >
-               {/* Turn Indicator / Game Status Banner */}
-               <div className={styles.statusBanner}>
-                  {gameStatus === 'ended' ? (
-                    <>
-                      <span className={styles.statusIcon}>🏆</span>
-                      <span className={styles.statusText}>
-                        {winner === username ? 'YOU WIN!' : winner ? `${winner} WINS!` : 'DRAW!'} 
-                        <span className={styles.statusSubtext}> - {getWinReasonText()}</span>
-                      </span>
-                      <button onClick={handlePlayAgain} className={styles.playAgainBtn}>Play Again</button>
-                    </>
-                  ) : gameStatus === 'playing' ? (
-                    <>
-                      <span className={styles.statusIcon}>{isMyTurn ? '👉' : '⏳'}</span>
-                      <span className={styles.statusText}>
-                        {isMyTurn ? 'Your Turn!' : `${turnPlayerName}'s turn`}
-                      </span>
-                      <div
-                        className={`${styles.turnIndicatorDisc} ${
-                          currentTurn >= 1 && currentTurn <= 8
-                            ? discClasses[currentTurn - 1]
-                            : styles.p1DiscPreview
-                        }`}
-                      />
-                    </>
-                  ) : null}
-               </div>
+               {gameStatus === 'playing' && (
+                 <div className={styles.turnLineSimple}>
+                   <span className={styles.turnLineText}>
+                     {turnPlayerName === '…' ? '…' : `${turnPlayerName}'s turn`}
+                   </span>
+                   <div
+                     className={`${styles.turnIndicatorDisc} ${
+                       currentTurn >= 1 && currentTurn <= 8
+                         ? discClasses[currentTurn - 1]
+                         : styles.p1DiscPreview
+                     }`}
+                     aria-hidden
+                   />
+                 </div>
+               )}
 
-               {/* Hover Row (Floating Disc) */}
-               <div className={styles.hoverRow}>
-                 {Array(boardCols)
-                   .fill(0)
-                   .map((_, colIndex) => (
-                   <div 
-                      key={colIndex} 
-                      className={styles.hoverCell}
-                      onMouseEnter={() => handleMouseEnter(colIndex)}
-                      onMouseLeave={handleMouseLeave}
-                      onClick={() => handleColumnClick(colIndex)}
-                   >
-                      {hoveredCol === colIndex && isMyTurn && !winner && (
-                        <div className={`${styles.floatingDisc} ${getFloatingClass()}`}></div>
-                      )}
-                   </div>
-                 ))}
-               </div>
-
-               {/* Actual Board */}
-               <div className={styles.board}>
-                 {board.map((row, rowIndex) => (
-                   <div key={rowIndex} className={styles.row}>
-                     {row.map((cell, colIndex) => {
-                       const isWinningCell = winningCells.some(
-                         wc => wc.row === rowIndex && wc.col === colIndex
-                       );
-                       return (
-                        <div
-                          key={colIndex}
-                          className={styles.cell}
-                          onMouseEnter={() => handleMouseEnter(colIndex)}
-                          onClick={() => handleColumnClick(colIndex)}
+               {gameStatus === 'ended' && (
+                 <div className={styles.statusBanner}>
+                    <span className={styles.statusIcon}>🏆</span>
+                    <span className={styles.statusText}>
+                      {endGameHeadline()}
+                      <span className={styles.statusSubtext}> - {getWinReasonText()}</span>
+                    </span>
+                    {scoringMode && scores.length > 0 && (
+                      <div className={styles.statusSubtext} style={{ width: '100%', textAlign: 'center' }}>
+                        Final:{' '}
+                        {playerUsernames.map((n, i) => (
+                          <span key={n + i} style={{ marginRight: 10 }}>
+                            {n} {scores[i] ?? 0}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {invitePartyId && gameMode === 'friend' ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={handlePlayAgain}
+                          className={styles.playAgainBtn}
+                          disabled={hasVotedRematch}
                         >
-                          <div className={styles.hole}>
-                             {cell !== 0 && (
-                               <div
-                                 className={`${styles.disc} ${getCellClass(cell)} ${isWinningCell ? styles.winningDisc : ''}`}
-                               />
-                             )}
-                          </div>
-                        </div>
-                       );
-                     })}
+                          {hasVotedRematch ? 'Waiting for others…' : 'Play again (same players)'}
+                        </button>
+                        {rematchNeeded > 0 && (
+                          <span className={styles.statusSubtext}>
+                            {rematchVotes} / {rematchNeeded} ready for rematch
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleLeaveToMenu}
+                          className={styles.playAgainBtn}
+                          style={{
+                            background: 'linear-gradient(180deg, #64748b 0%, #475569 100%)',
+                            boxShadow: '0 4px 0 #334155',
+                          }}
+                        >
+                          Leave to menu
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={handlePlayAgain} className={styles.playAgainBtn}>
+                        Play Again
+                      </button>
+                    )}
+                 </div>
+               )}
+
+               {/* Preview strip sits above the wood frame; disc is not inside .board */}
+               <div
+                 className={styles.boardPlayArea}
+                 onPointerMove={handleBoardPointerMove}
+                 onPointerLeave={handleBoardPointerLeave}
+               >
+                 {gameStatus === 'playing' && (
+                   <div
+                     ref={hoverStripRef}
+                     className={styles.hoverStripOutside}
+                     onPointerDown={(e) => {
+                       e.preventDefault();
+                       if (gameStatus !== 'playing' || !isMyTurn || winner) return;
+                       const col = columnFromClientX(e.clientX);
+                       if (col !== null) handleColumnClick(col);
+                     }}
+                     aria-hidden
+                   >
+                     {pointerPreview && isMyTurn && !winner && (
+                       <div
+                         className={`${styles.floatingDisc} ${styles.floatingDiscFollow} ${getFloatingClass()}`}
+                         style={{
+                           left: pointerPreview.x,
+                           top: pointerPreview.y,
+                         }}
+                       />
+                     )}
                    </div>
-                 ))}
+                 )}
+                 <div ref={boardRef} className={styles.board}>
+                   {board.map((row, rowIndex) => (
+                     <div key={rowIndex} className={styles.row} data-board-row={rowIndex}>
+                       {row.map((cell, colIndex) => {
+                         const isWinningCell = winningCells.some(
+                           (wc) => wc.row === rowIndex && wc.col === colIndex
+                         );
+                         return (
+                           <div
+                             key={colIndex}
+                             className={styles.cell}
+                             data-col={colIndex}
+                             onClick={() => handleColumnClick(colIndex)}
+                           >
+                             <div className={styles.hole}>
+                               {cell !== 0 && (
+                                 <div
+                                   className={`${styles.disc} ${getCellClass(cell)} ${isWinningCell ? styles.winningDisc : ''}`}
+                                 />
+                               )}
+                             </div>
+                           </div>
+                         );
+                       })}
+                     </div>
+                   ))}
+                 </div>
                </div>
             </div>
           </>
@@ -745,7 +1052,7 @@ export default function Home() {
                   </div>
                   <p className={styles.waitingText} style={{ fontSize: '0.85rem', marginTop: 0 }}>
                     Invite {friendMaxPlayers - 1} friend{friendMaxPlayers > 2 ? 's' : ''} with the room code.
-                    Larger games use a bigger board and a unique color per player.
+                    3+ players: bigger board, unique colors, and score mode — most 4-in-a-rows when the board fills wins.
                   </p>
                   <button className={`${styles.button} ${styles.buttonFriend}`} onClick={handleCreateRoom}>
                     🏠 Create room

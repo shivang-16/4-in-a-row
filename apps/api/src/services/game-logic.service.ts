@@ -6,6 +6,8 @@ import {
   Position,
   MoveResult,
   WinReason,
+  cellValueToSlotIndex,
+  slotIndexToCellValue,
 } from '../types/game';
 
 export class GameLogic {
@@ -136,6 +138,61 @@ export class GameLogic {
     return null;
   }
 
+  /**
+   * How many distinct directions (horizontal / vertical / two diagonals) have a run of ≥4
+   * through the cell just played. Used for 3+ player scoring mode.
+   */
+  static countFourInARowLinesAt(
+    board: Board,
+    row: number,
+    col: number,
+    player: CellValue
+  ): number {
+    const directions: [number, number][] = [
+      [0, 1],
+      [1, 0],
+      [-1, 1],
+      [1, 1],
+    ];
+    let count = 0;
+    for (const [dr, dc] of directions) {
+      const line = this.getWinningCells(board, row, col, dr, dc, player);
+      if (line && line.length >= 4) count++;
+    }
+    return count;
+  }
+
+  /** Multiplayer scoring: no instant win; points per line; ends when board is full. */
+  static makeMoveScoring(
+    board: Board,
+    column: number,
+    player: CellValue
+  ): MoveResult {
+    const { cols } = this.dims(board);
+    if (column < 0 || column >= cols) {
+      return { success: false, error: 'Invalid column' };
+    }
+
+    if (this.isColumnFull(board, column)) {
+      return { success: false, error: 'Column is full' };
+    }
+
+    const row = this.dropDisc(board, column, player);
+    if (row === -1) {
+      return { success: false, error: 'Failed to drop disc' };
+    }
+
+    const linesScored = this.countFourInARowLinesAt(board, row, column, player);
+    const scoringGameOver = this.isBoardFull(board);
+
+    return {
+      success: true,
+      row,
+      linesScored,
+      scoringGameOver,
+    };
+  }
+
   static isBoardFull(board: Board): boolean {
     return board[0].every((cell) => cell !== CellValue.EMPTY);
   }
@@ -195,6 +252,43 @@ export class GameLogic {
     }
 
     return { success: true, row };
+  }
+
+  /** Pack non-empty cells to the bottom of the column. */
+  static gravityColumn(board: Board, col: number): void {
+    const { rows } = this.dims(board);
+    const stack: CellValue[] = [];
+    for (let r = rows - 1; r >= 0; r--) {
+      const v = board[r][col];
+      if (v !== CellValue.EMPTY) stack.push(v);
+    }
+    let i = 0;
+    for (let r = rows - 1; r >= 0; r--) {
+      board[r][col] = i < stack.length ? stack[i++]! : CellValue.EMPTY;
+    }
+  }
+
+  /**
+   * Remove one seat from the board: clear that color, renumber higher player colors down by one, then gravity.
+   */
+  static remapBoardRemovePlayer(board: Board, removedSlotIndex: number): void {
+    const { rows, cols } = this.dims(board);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const v = board[r][c];
+        if (v === CellValue.EMPTY) continue;
+        const oldSlot = cellValueToSlotIndex(v);
+        if (oldSlot === removedSlotIndex) {
+          board[r][c] = CellValue.EMPTY;
+        } else {
+          const newSlot = oldSlot > removedSlotIndex ? oldSlot - 1 : oldSlot;
+          board[r][c] = slotIndexToCellValue(newSlot);
+        }
+      }
+    }
+    for (let c = 0; c < cols; c++) {
+      this.gravityColumn(board, c);
+    }
   }
 
   static cloneBoard(board: Board): Board {

@@ -51,6 +51,10 @@ export enum WinReason {
   DRAW = 'draw',
   FORFEIT = 'forfeit',
   OPPONENT_DISCONNECT = 'opponent_disconnect',
+  /** 3+ players: board full; one player has the highest 4-in-a-row count */
+  MOST_POINTS = 'most_points',
+  /** 3+ players: board full; top score is tied */
+  SCORE_TIE = 'score_tie',
 }
 
 export type Board = CellValue[][];
@@ -84,6 +88,12 @@ export interface GameState {
   endedAt?: Date;
   /** Started from Play with Friends lobby (not random matchmaking) */
   isInviteGame?: boolean;
+  /** Stable id for the same group across rematches (invite games only) */
+  partyId?: string;
+  /** When true (3+ human players), 4-in-a-rows add points; game ends when board is full */
+  scoringMode?: boolean;
+  /** Points per player index (same order as players); used when scoringMode */
+  scores?: number[];
 }
 
 export interface Move {
@@ -102,4 +112,8 @@ export interface MoveResult {
   winningCells?: Position[];
   isDraw?: boolean;
   error?: string;
+  /** Scoring mode: how many distinct lines of ≥4 this placement completed */
+  linesScored?: number;
+  /** Scoring mode: board is full — resolve winner by scores */
+  scoringGameOver?: boolean;
 }

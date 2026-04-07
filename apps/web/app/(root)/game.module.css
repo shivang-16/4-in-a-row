@@ -1,6 +1,7 @@
 /* Global Layout */
 .container {
   min-height: 100vh;
+  min-height: 100dvh;
   /* Layered background: dark overlay on top of image */
   background: 
     linear-gradient(rgba(15, 5, 24, 0.5), rgba(15, 5, 24, 0.5)),
@@ -8,7 +9,9 @@
   display: flex;
   font-family: var(--font-lilita), 'Courier New', monospace;
   color: #fff;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   position: relative;
   /* Custom Gaming Cursor (SVG) */
   cursor: url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 2L12 28L16 16L28 12L2 2Z' fill='%23a044ff' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 2 2, crosshair;
@@ -153,6 +156,8 @@
 /* Main Area */
 .mainArea {
   flex: 1;
+  min-width: 0; /* allow flex child to shrink so board fits viewport */
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -536,9 +541,39 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding-left: max(4px, env(safe-area-inset-left));
+  padding-right: max(4px, env(safe-area-inset-right));
 }
 
-/* Status Banner (Turn Indicator / Game End) */
+/* Plain turn line during play (no pill box) */
+.turnLineSimple {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 0 8px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.turnLineText {
+  font-size: 1.25rem;
+  font-weight: bold;
+  color: #fff;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.45);
+}
+
+/* Status Banner (Game End only) */
 .statusBanner {
   display: flex;
   align-items: center;
@@ -550,7 +585,10 @@
   border-radius: 50px;
   border: 2px solid rgba(160, 68, 255, 0.5);
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
-  min-width: 300px;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .statusIcon {
@@ -605,19 +643,27 @@
   box-shadow: 0 0 0 #1e8449;
 }
 
-.hoverRow {
+/* Wraps the outside preview strip + wood board so widths stay aligned */
+.boardPlayArea {
   display: flex;
-  width: 100%;
-  height: 80px; /* Space for floating disc */
-  margin-bottom: 5px;
+  flex-direction: column;
+  align-items: stretch;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
-.hoverCell {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: flex-end;
-  padding-bottom: 10px;
+
+/* Drop preview zone above the wood frame (purple background), not inside .board */
+.hoverStripOutside {
+  position: relative;
+  width: 100%;
+  min-height: 80px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
   cursor: pointer;
+  touch-action: none;
+  box-sizing: border-box;
 }
 
 .floatingDisc {
@@ -625,6 +671,15 @@
   height: 60px;
   border-radius: 50%;
   animation: float 1s infinite ease-in-out;
+}
+
+/* Preview tracks cursor — no bobbing, centered on pointer X */
+.floatingDiscFollow {
+  position: absolute;
+  z-index: 6;
+  pointer-events: none;
+  animation: none;
+  transform: translateX(-50%);
 }
 .p1Floating {
   /* Yellow Striped */
@@ -653,6 +708,7 @@
 
 /* The Wooden Board */
 .board {
+  position: relative;
   background-color: #e6c288; /* Wood Color Fallback */
   /* Realistic smooth wood look */
   background: linear-gradient(180deg, #f5d7b8 0%, #dcb085 50%, #c9a06e 100%);
@@ -805,6 +861,8 @@
 .boardScale .board {
   gap: var(--board-gap, 10px);
   padding: clamp(8px, 2vw, 20px);
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .boardScale .floatingDisc {
@@ -812,10 +870,12 @@
   height: min(72px, calc(var(--cell-size, 72px) * 0.85));
 }
 
-.boardScale .hoverRow {
+.boardScale .hoverStripOutside {
   max-width: 100%;
-  overflow-x: auto;
-  padding-bottom: 6px;
+  min-height: calc(var(--cell-size, 48px) * 1.05 + 14px);
+  margin-bottom: var(--board-gap, 10px);
+  padding-bottom: 2px;
+  box-sizing: border-box;
 }
 
 .sidebarWide {
@@ -965,8 +1025,8 @@
     height: 50px;
   }
   
-  .hoverRow {
-    height: 60px;
+  .hoverStripOutside {
+    min-height: 60px;
   }
   
   .board {
@@ -1055,8 +1115,8 @@
     height: 40px;
   }
   
-  .hoverRow {
-    height: 50px;
+  .hoverStripOutside {
+    min-height: 50px;
   }
   
   .board {
@@ -1081,6 +1141,9 @@
   
   .statusText {
     font-size: 1rem;
+    overflow-wrap: anywhere;
+    text-align: center;
+    max-width: 100%;
   }
   
   .turnIndicatorDisc {
@@ -1091,6 +1154,11 @@
   .playAgainBtn {
     padding: 8px 15px;
     font-size: 0.75rem;
+  }
+  
+  .boardScale .statusBanner {
+    border-radius: 20px;
+    padding: 10px 12px;
   }
   
   .title {
@@ -1224,9 +1292,9 @@
     height: 32px;
   }
   
-  .hoverRow {
-    height: 40px;
-    margin-bottom: 3px;
+  .hoverStripOutside {
+    min-height: 40px;
+    margin-bottom: 6px;
   }
   
   .board {

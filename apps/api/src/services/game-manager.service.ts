@@ -7,6 +7,7 @@ import {
   Move,
   MoveResult,
   WinReason,
+  Position,
   cellValueToSlotIndex,
   slotIndexToCellValue,
   MAX_PLAYERS_PER_GAME,
@@ -28,7 +29,10 @@ export class GameManager {
    * Creates a game from an ordered list of participants (turn order = array order).
    * Used by matchmaking (2 humans), bot queue (human + bot), and private rooms (2–8 humans).
    */
-  createGame(participants: GameParticipantInput[], options?: { isInviteGame?: boolean }): GameState {
+  createGame(
+    participants: GameParticipantInput[],
+    options?: { isInviteGame?: boolean; partyId?: string }
+  ): GameState {
     if (participants.length < 2) {
       throw new Error('At least 2 players required');
     }
@@ -37,6 +41,10 @@ export class GameManager {
     }
 
     const gameId = uuidv4();
+    const partyId =
+      options?.isInviteGame === true
+        ? options.partyId ?? uuidv4()
+        : undefined;
     const { rows, cols } = boardSizeForPlayerCount(participants.length);
     const players: Player[] = participants.map((p) => ({
       id: uuidv4(),
@@ -44,6 +52,9 @@ export class GameManager {
       isBot: p.isBot,
       connected: !p.isBot,
     }));
+
+    const scoringMode = players.length > 2;
+    const scores = scoringMode ? players.map(() => 0) : undefined;
 
     const gameState: GameState = {
       id: gameId,
@@ -58,6 +69,9 @@ export class GameManager {
       moves: [],
       startedAt: new Date(),
       isInviteGame: options?.isInviteGame,
+      partyId,
+      scoringMode,
+      scores,
     };
 
     this.activeGames.set(gameId, gameState);
@@ -113,7 +127,9 @@ export class GameManager {
       return { success: false, error: 'Not your turn' };
     }
 
-    const result = GameLogic.makeMove(game.board, column, game.currentTurn);
+    const result = game.scoringMode
+      ? GameLogic.makeMoveScoring(game.board, column, game.currentTurn)
+      : GameLogic.makeMove(game.board, column, game.currentTurn);
 
     if (!result.success) {
       return result;
@@ -127,6 +143,10 @@ export class GameManager {
     };
     game.moves.push(move);
 
+    if (game.scoringMode && game.scores) {
+      game.scores[slot] += result.linesScored ?? 0;
+    }
+
     kafkaService.sendGameEvent(GameEventType.MOVE_MADE, {
       gameId,
       player: username,
@@ -135,7 +155,9 @@ export class GameManager {
       moveNumber: game.moves.length,
     });
 
-    if (result.winningPlayer !== undefined || result.isDraw) {
+    if (game.scoringMode && result.scoringGameOver) {
+      this.finishScoringGame(game, gameId);
+    } else if (!game.scoringMode && (result.winningPlayer !== undefined || result.isDraw)) {
       game.status = GameStatus.COMPLETED;
       if (result.isDraw) {
         game.winner = null;
@@ -147,7 +169,7 @@ export class GameManager {
       game.endedAt = new Date();
 
       if (wsService) {
-        wsService.emitGameEnd(gameId, game.winner, result.winReason!, result.winningCells);
+        this.notifyInviteGameEnded(game, gameId, result.winReason!, result.winningCells);
       }
 
       this.saveGameToDatabase(game);
@@ -179,10 +201,57 @@ export class GameManager {
         currentTurn: game.currentTurn,
         lastMove: move,
         isGameOver: game.status === GameStatus.COMPLETED,
+        scores: game.scoringMode ? game.scores : undefined,
+        linesScored: game.scoringMode ? result.linesScored : undefined,
+        scoringMode: game.scoringMode,
       });
     }
 
     return result;
+  }
+
+  /** After the last disc fills the board in scoring mode — highest total lines of 4 wins. */
+  private finishScoringGame(game: GameState, gameId: string) {
+    const scores = game.scores ?? game.players.map(() => 0);
+    let maxScore = -1;
+    const leaderIndices: number[] = [];
+    for (let i = 0; i < game.players.length; i++) {
+      const s = scores[i] ?? 0;
+      if (s > maxScore) {
+        maxScore = s;
+        leaderIndices.length = 0;
+        leaderIndices.push(i);
+      } else if (s === maxScore) {
+        leaderIndices.push(i);
+      }
+    }
+
+    game.status = GameStatus.COMPLETED;
+    game.endedAt = new Date();
+    if (leaderIndices.length === 1) {
+      game.winner = game.players[leaderIndices[0]]?.username ?? null;
+      game.winReason = WinReason.MOST_POINTS;
+    } else {
+      game.winner = null;
+      game.winReason = WinReason.SCORE_TIE;
+    }
+
+    if (wsService) {
+      this.notifyInviteGameEnded(game, gameId, game.winReason, undefined);
+    }
+
+    this.saveGameToDatabase(game);
+
+    kafkaService.sendGameEvent(GameEventType.GAME_ENDED, {
+      gameId,
+      winner: game.winner,
+      reason: game.winReason,
+      duration: game.endedAt.getTime() - game.startedAt.getTime(),
+      totalMoves: game.moves.length,
+    });
+
+    this.cleanupGameMaps(gameId, game);
+    console.log(`🧹 Scoring game finished ${gameId} — scores: ${scores.join(',')}`);
   }
 
   private makeBotMove(gameId: string) {
@@ -201,6 +270,26 @@ export class GameManager {
     }
   }
 
+  private notifyInviteGameEnded(
+    game: GameState,
+    gameId: string,
+    reason: WinReason,
+    winningCells?: Position[]
+  ) {
+    if (!wsService) return;
+    const humans = game.players.filter((p) => !p.isBot).map((p) => p.username);
+    if (game.isInviteGame && game.partyId && humans.length >= 2) {
+      wsService.registerInviteRematch(game.partyId, humans);
+    }
+    wsService.emitGameEnd(gameId, game.winner, reason, winningCells, {
+      partyId: game.partyId,
+      canRematch: Boolean(game.isInviteGame && game.partyId && humans.length >= 2),
+      rematchPlayers: game.isInviteGame && game.partyId ? humans : undefined,
+      scores: game.scoringMode ? game.scores : undefined,
+      scoringMode: game.scoringMode,
+    });
+  }
+
   private cleanupGameMaps(gameId: string, game: GameState) {
     this.activeGames.delete(gameId);
     for (const p of game.players) {
@@ -211,36 +300,82 @@ export class GameManager {
   }
 
   /**
-   * When a player fails to reconnect, assign win to the next human in seat order after them.
+   * After a disconnect timeout: remove that player from the game, remap discs + gravity,
+   * and keep playing if at least two players remain; otherwise the sole remaining player wins.
    */
-  forfeitDisconnectedPlayer(gameId: string, disconnectedUsername: string): string | null {
+  removeDisconnectedPlayerFromGame(gameId: string, disconnectedUsername: string): boolean {
     const game = this.activeGames.get(gameId);
-    if (!game) return null;
+    if (!game || game.status !== GameStatus.IN_PROGRESS) return false;
 
-    const idx = game.players.findIndex((p) => p.username === disconnectedUsername);
-    if (idx === -1) return null;
+    const removedIndex = game.players.findIndex((p) => p.username === disconnectedUsername);
+    if (removedIndex === -1) return false;
 
-    let winner: string | null = null;
-    for (let k = 1; k < game.players.length; k++) {
-      const p = game.players[(idx + k) % game.players.length];
-      if (!p.isBot) {
-        winner = p.username;
-        break;
-      }
+    const oldN = game.players.length;
+    const oldTurnSlot = cellValueToSlotIndex(game.currentTurn);
+
+    GameLogic.remapBoardRemovePlayer(game.board, removedIndex);
+    game.players.splice(removedIndex, 1);
+    if (game.scores) {
+      game.scores.splice(removedIndex, 1);
     }
 
-    game.status = GameStatus.COMPLETED;
-    game.winner = winner;
-    game.winReason = WinReason.OPPONENT_DISCONNECT;
-    game.endedAt = new Date();
+    this.playerToGame.delete(disconnectedUsername);
+
+    const newN = game.players.length;
+    if (newN < 2) {
+      const sole = game.players[0];
+      game.status = GameStatus.COMPLETED;
+      game.winner = sole?.username ?? null;
+      game.winReason = WinReason.OPPONENT_DISCONNECT;
+      game.endedAt = new Date();
+      if (sole) {
+        game.currentTurn = slotIndexToCellValue(0);
+      }
+
+      if (wsService) {
+        wsService.emitGameUpdate(gameId, {
+          board: game.board,
+          currentTurn: game.currentTurn,
+          scores: game.scoringMode ? game.scores : undefined,
+          scoringMode: game.scoringMode,
+          playerUsernames: game.players.map((p) => p.username),
+          playerLeft: disconnectedUsername,
+        });
+        this.notifyInviteGameEnded(game, gameId, WinReason.OPPONENT_DISCONNECT, undefined);
+      }
+
+      this.saveGameToDatabase(game).catch((e) => console.error(e));
+      this.cleanupGameMaps(gameId, game);
+      return true;
+    }
+
+    let newTurnSlot: number;
+    if (oldTurnSlot === removedIndex) {
+      const nextOld = (removedIndex + 1) % oldN;
+      newTurnSlot = nextOld > removedIndex ? nextOld - 1 : nextOld;
+    } else {
+      newTurnSlot = oldTurnSlot > removedIndex ? oldTurnSlot - 1 : oldTurnSlot;
+    }
+    game.currentTurn = slotIndexToCellValue(newTurnSlot);
 
     if (wsService) {
-      wsService.emitGameEnd(gameId, winner, WinReason.OPPONENT_DISCONNECT);
+      wsService.emitGameUpdate(gameId, {
+        board: game.board,
+        currentTurn: game.currentTurn,
+        scores: game.scoringMode ? game.scores : undefined,
+        scoringMode: game.scoringMode,
+        playerUsernames: game.players.map((p) => p.username),
+        playerLeft: disconnectedUsername,
+      });
     }
 
-    this.saveGameToDatabase(game).catch((e) => console.error(e));
-    this.cleanupGameMaps(gameId, game);
-    return winner;
+    const nextSlot = cellValueToSlotIndex(game.currentTurn);
+    const nextPl = game.players[nextSlot];
+    if (nextPl?.isBot) {
+      setTimeout(() => this.makeBotMove(gameId), 1000);
+    }
+
+    return true;
   }
 
   getGame(gameId: string): GameState | undefined {
