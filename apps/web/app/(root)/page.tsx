@@ -464,6 +464,14 @@ export default function Home() {
       const gid = callGameIdRef.current ?? data.gameId;
       setCallMembers((prev) => [...new Set([...prev, data.username])]);
       const pc = getOrCreatePC(data.username, gid, newSocket);
+      // Ensure our local mic tracks are attached before creating the offer
+      const localStream = localStreamRef.current;
+      if (localStream) {
+        localStream.getTracks().forEach((t) => {
+          const alreadyAdded = pc.getSenders().some((s) => s.track?.id === t.id);
+          if (!alreadyAdded) pc.addTrack(t, localStream);
+        });
+      }
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       newSocket.emit('call:offer', { to: data.username, offer, gameId: gid });
@@ -474,6 +482,14 @@ export default function Home() {
       const gid = callGameIdRef.current ?? data.gameId;
       setCallMembers((prev) => [...new Set([...prev, data.from])]);
       const pc = getOrCreatePC(data.from, gid, newSocket);
+      // Ensure our local mic tracks are attached before answering
+      const localStream = localStreamRef.current;
+      if (localStream) {
+        localStream.getTracks().forEach((t) => {
+          const alreadyAdded = pc.getSenders().some((s) => s.track?.id === t.id);
+          if (!alreadyAdded) pc.addTrack(t, localStream);
+        });
+      }
       await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
       await flushCandidates(data.from);
       const answer = await pc.createAnswer();
@@ -822,17 +838,24 @@ export default function Home() {
       }
       const pc = new RTCPeerConnection(STUN_SERVERS);
 
-      // Add local tracks
-      localStreamRef.current?.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current!));
+      // NOTE: local tracks are added separately after mic is acquired — NOT here,
+      // because this function may be called before getUserMedia resolves.
 
-      // Play remote audio
+      // Play remote audio when tracks arrive
       pc.ontrack = (ev) => {
-        const audio = new Audio();
-        audio.srcObject = ev.streams[0] ?? null;
+        // Prefer the first full stream; fall back to a new one if missing
+        const remoteStream = ev.streams[0] ?? new MediaStream([ev.track]);
+        const audio = document.createElement('audio');
+        audio.srcObject = remoteStream;
         audio.autoplay = true;
+        // Mute-prevention: some browsers block autoplay without user gesture;
+        // we try to play() explicitly and ignore errors.
+        audio.play().catch(() => {});
         document.body.appendChild(audio);
         pc.addEventListener('connectionstatechange', () => {
           if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+            audio.pause();
+            audio.srcObject = null;
             audio.remove();
           }
         });
@@ -937,6 +960,14 @@ export default function Home() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
       callGameIdRef.current = gameId;
+      // Add local tracks to any peer connections that were created before the stream
+      // was available (e.g. if we received an offer before mic was ready).
+      peerConnectionsRef.current.forEach((pc) => {
+        stream.getTracks().forEach((t) => {
+          const alreadyAdded = pc.getSenders().some((s) => s.track?.id === t.id);
+          if (!alreadyAdded) pc.addTrack(t, stream);
+        });
+      });
       socket.emit('call:join', { gameId });
       setAmInCall(true);
     } catch {

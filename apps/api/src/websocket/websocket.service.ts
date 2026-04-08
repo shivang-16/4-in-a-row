@@ -33,6 +33,7 @@ export class WebSocketService {
     // Define allowed origins
     const allowedOrigins = [
       'https://4-in-a-row-web-kappa.vercel.app',
+      'https://play.shivangyadav.com',
       'http://localhost:3000',
       process.env.FRONTEND_URL,
     ].filter(Boolean) as string[];
