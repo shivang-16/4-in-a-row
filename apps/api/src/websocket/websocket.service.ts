@@ -24,6 +24,8 @@ export class WebSocketService {
   private rematchVotes: Map<string, Set<string>> = new Map();
   /** Countdown timers: start when first vote arrives; fires after 10s to start with whoever voted */
   private rematchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  /** Last win streak (4–8) for this party — reused on rematch so host choice persists */
+  private rematchWinStreak: Map<string, number> = new Map();
   /** Voice call: tracks who is in the call for each game room */
   private callRooms: Map<string, Set<string>> = new Map(); // gameId → Set<username>
 
@@ -527,6 +529,7 @@ export class WebSocketService {
     // Participants = voted AND currently connected
     const participants = [...votes].filter((u) => this.connectedPlayers.get(u)?.connected);
 
+    const winStreak = this.rematchWinStreak.get(partyId);
     this.cleanupRematch(partyId);
 
     if (participants.length < 2) {
@@ -542,9 +545,15 @@ export class WebSocketService {
     try {
       gameManager.createGame(
         participants.map((u) => ({ username: u, isBot: false })),
-        { isInviteGame: true, partyId }
+        {
+          isInviteGame: true,
+          partyId,
+          ...(winStreak != null ? { winStreak } : {}),
+        }
       );
-      console.log(`🔁 Rematch started for party ${partyId}: ${participants.join(', ')}`);
+      console.log(
+        `🔁 Rematch started for party ${partyId}: ${participants.join(', ')} (winStreak: ${winStreak ?? 'default'})`
+      );
     } catch (e) {
       console.error('Rematch failed:', e);
       for (const u of participants) {
@@ -559,6 +568,7 @@ export class WebSocketService {
     this.rematchTimers.delete(partyId);
     this.rematchVotes.delete(partyId);
     this.rematchPlayers.delete(partyId);
+    this.rematchWinStreak.delete(partyId);
   }
 
   /** Notifies each human participant and joins them to the Socket.IO game room */
@@ -618,13 +628,18 @@ export class WebSocketService {
     this.io.to(gameId).emit('game:update', data);
   }
 
-  public registerInviteRematch(partyId: string, orderedHumanUsernames: string[]) {
+  public registerInviteRematch(partyId: string, orderedHumanUsernames: string[], winStreak?: number) {
     if (!partyId || orderedHumanUsernames.length < 2) return;
     // Clear any leftover timer from a previous rematch cycle
     this.cleanupRematch(partyId);
     this.rematchPlayers.set(partyId, [...orderedHumanUsernames]);
     this.rematchVotes.set(partyId, new Set());
-    console.log(`🔁 Rematch ready for party ${partyId}: ${orderedHumanUsernames.join(', ')}`);
+    if (winStreak != null) {
+      this.rematchWinStreak.set(partyId, Math.max(4, Math.min(8, winStreak)));
+    }
+    console.log(
+      `🔁 Rematch ready for party ${partyId}: ${orderedHumanUsernames.join(', ')} (winStreak: ${winStreak ?? 'default'})`
+    );
   }
 
   // Emit game end event

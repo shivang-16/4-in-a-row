@@ -302,7 +302,7 @@ export class GameManager {
     if (!wsService) return;
     const humans = game.players.filter((p) => !p.isBot).map((p) => p.username);
     if (game.isInviteGame && game.partyId && humans.length >= 2) {
-      wsService.registerInviteRematch(game.partyId, humans);
+      wsService.registerInviteRematch(game.partyId, humans, game.winStreak);
     }
     wsService.emitGameEnd(gameId, game.winner, reason, winningCells, {
       partyId: game.partyId,
