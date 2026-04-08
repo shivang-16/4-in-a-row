@@ -1705,17 +1705,235 @@
               -6px 12px 15px rgba(0,0,0,0.3);
 }
 
+/* Standalone call tab — anchored above the chat toggle (bright teal so it reads vs purple chat) */
+.callTabBtn {
+  position: absolute;
+  left: -70px;
+  top: 72px; /* chat toggle is at top: 20px, height 40px → 20+40+12 gap = 72 */
+  width: 65px;
+  height: 40px;
+  background: linear-gradient(180deg, #2dd4bf 0%, #14b8a6 45%, #0d9488 100%);
+  border: 2px solid #0f766e;
+  border-radius: 12px 0 0 12px;
+  border-right: none;
+  color: white;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: -4px 4px 0px #115e59,
+              -4px 8px 10px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: saturate(1.05);
+}
+
+.callTabBtn:hover {
+  filter: brightness(1.15);
+  left: -75px;
+}
+
+.callTabBtn:disabled {
+  cursor: not-allowed;
+  filter: none;
+  left: -70px;
+}
+
+.callTabBtnActive {
+  background: linear-gradient(180deg, #22c55e 0%, #16a34a 50%, #15803d 100%);
+  border-color: #166534;
+  box-shadow: -4px 4px 0px #14532d,
+              -4px 8px 10px rgba(0,0,0,0.3),
+              0 0 10px rgba(34, 197, 94, 0.35);
+  opacity: 0.92;
+}
+
 .chatHeader {
-  padding: 20px;
+  padding: 12px 16px;
   background: linear-gradient(180deg, #a044ff 0%, #6a3093 100%);
   font-size: 1.2rem;
   border-bottom: 4px solid #4a2c7a;
   color: #fff;
-  text-align: center;
   text-transform: uppercase;
   letter-spacing: 2px;
   text-shadow: 0px 2px 0px rgba(0,0,0,0.3);
   box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Call controls in chat header (start-call button only) */
+.callControls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.callBtn {
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 1.1rem;
+  padding: 4px 8px;
+  transition: background 0.15s, transform 0.1s;
+  line-height: 1;
+}
+
+.callBtn:hover {
+  background: rgba(255,255,255,0.28);
+  transform: scale(1.08);
+}
+
+/* ── Floating call bar ───────────────────────────────────────────────────── */
+.callFloatingBar {
+  position: fixed;
+  /* Sit just below the very top edge */
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(18, 10, 35, 0.93);
+  border: 1.5px solid rgba(160, 68, 255, 0.5);
+  border-radius: 40px;
+  padding: 8px 16px 8px 12px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(160, 68, 255, 0.15);
+  animation: callBarIn 0.25s ease-out both;
+  min-width: 200px;
+  max-width: min(420px, calc(100vw - 160px)); /* never overlap chat or sidebar */
+}
+
+.callFloatingBar.callFloatingBarActive {
+  border-color: rgba(80, 220, 100, 0.6);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45), 0 0 14px rgba(80, 220, 100, 0.2);
+}
+
+@keyframes callBarIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)      scale(1); }
+}
+
+@keyframes callBarInUp {
+  from { opacity: 0; transform: translateX(-50%) translateY(10px) scale(0.95); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)     scale(1); }
+}
+
+.callFloatingIcon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.callFloatingInfo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.callFloatingLabel {
+  font-size: 0.78rem;
+  color: #d0bfff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.callFloatingLabel strong {
+  color: #fff;
+}
+
+.callFloatingTimer {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  margin-top: 1px;
+}
+
+.callFloatingMember {
+  background: rgba(80, 220, 100, 0.15);
+  border: 1px solid rgba(80, 220, 100, 0.3);
+  border-radius: 20px;
+  padding: 1px 7px;
+  font-size: 0.72rem;
+  color: #a5f3b0;
+  white-space: nowrap;
+}
+
+.callFloatingActions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.callFloatBtn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 5px 13px;
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+
+.callFloatBtn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  transform: scale(1.05);
+}
+
+.callFloatBtnJoin {
+  background: rgba(80, 220, 100, 0.2);
+  border-color: rgba(80, 220, 100, 0.45);
+  color: #a5f3b0;
+}
+
+.callFloatBtnJoin:hover {
+  background: rgba(80, 220, 100, 0.35);
+}
+
+.callMemberCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  line-height: 1;
+}
+
+.callFloatBtnMuted {
+  background: rgba(220, 80, 80, 0.2);
+  border-color: rgba(220, 80, 80, 0.4);
+}
+
+.callFloatBtnLeave {
+  background: rgba(220, 60, 60, 0.2);
+  border-color: rgba(220, 60, 60, 0.45);
+  color: #fca5a5;
+}
+
+.callFloatBtnLeave:hover {
+  background: rgba(220, 60, 60, 0.35);
 }
 
 .chatMessages {
@@ -1824,8 +2042,9 @@
     transform: translateY(0);
   }
   
+  /* On mobile: CHAT left, CALL right (above panel) */
   .chatToggle {
-    left: 50%;
+    left: calc(50% - 46px - 65px);
     top: -50px;
     transform: translateX(-50%);
     border-radius: 8px 8px 0 0;
@@ -1835,7 +2054,35 @@
   
   .chatToggle:hover {
     transform: translateX(-50%) scale(1.05);
-    left: 50%;
+    left: calc(50% - 46px - 65px);
+  }
+
+  .callTabBtn {
+    position: absolute;
+    left: calc(50% + 46px);
+    top: -50px;
+    transform: translateX(-50%);
+    width: 65px;
+    height: 45px;
+    border-radius: 8px 8px 0 0;
+    border-right: 2px solid #0f766e;
+    border-bottom: none;
+    box-shadow: 0 -4px 0px #115e59, 0 -8px 10px rgba(0,0,0,0.3);
+  }
+
+  .callTabBtn:hover {
+    left: calc(50% + 46px);
+    filter: brightness(1.15);
+  }
+
+  /* Floating bar: move to bottom on mobile so it doesn't cover the player header */
+  .callFloatingBar {
+    top: auto;
+    bottom: 70px; /* sit above the chat/call tabs */
+    max-width: calc(100vw - 20px);
+    min-width: 0;
+    width: calc(100vw - 20px);
+    animation: callBarInUp 0.25s ease-out both;
   }
   
   .musicToggle {
@@ -1886,6 +2133,13 @@
     width: 70px;
     height: 40px;
     font-size: 0.75rem;
+  }
+
+  .callTabBtn {
+    top: -45px;
+    width: 55px;
+    height: 40px;
+    font-size: 1rem;
   }
   
   .unreadBadge {

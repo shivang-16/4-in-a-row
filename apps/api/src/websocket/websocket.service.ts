@@ -24,6 +24,8 @@ export class WebSocketService {
   private rematchVotes: Map<string, Set<string>> = new Map();
   /** Countdown timers: start when first vote arrives; fires after 10s to start with whoever voted */
   private rematchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  /** Voice call: tracks who is in the call for each game room */
+  private callRooms: Map<string, Set<string>> = new Map(); // gameId → Set<username>
 
   constructor(httpServer: HTTPServer) {
     // Define allowed origins
@@ -444,6 +446,74 @@ export class WebSocketService {
           message,
         });
         console.log(`💬 Chat message from ${data.username} in game ${gameId}: ${message}`);
+      });
+
+      // ── Voice call signaling ────────────────────────────────────────────────
+      // Player starts a call — broadcast ring to everyone else in the game room
+      socket.on('call:start', (data: { gameId: string }) => {
+        const username = socket.data.username as string;
+        const { gameId } = data;
+        if (!username || !gameId) return;
+        if (!this.callRooms.has(gameId)) this.callRooms.set(gameId, new Set());
+        this.callRooms.get(gameId)!.add(username);
+        socket.to(gameId).emit('call:ringing', { from: username, gameId });
+        console.log(`📞 Call started by ${username} in game ${gameId}`);
+      });
+
+      // Player accepts call — join the call room, tell existing members to initiate offers
+      socket.on('call:join', (data: { gameId: string }) => {
+        const username = socket.data.username as string;
+        const { gameId } = data;
+        if (!username || !gameId) return;
+        if (!this.callRooms.has(gameId)) this.callRooms.set(gameId, new Set());
+        const members = this.callRooms.get(gameId)!;
+        const existing = [...members]; // members before this joiner
+        members.add(username);
+        // Tell each existing member to create an offer for the new joiner
+        for (const peer of existing) {
+          const peerSock = this.connectedPlayers.get(peer);
+          peerSock?.emit('call:peer_joined', { username, gameId });
+        }
+        // Tell the new joiner who is already in the call
+        socket.emit('call:members', { members: existing, gameId });
+        console.log(`📞 ${username} joined call in game ${gameId}. Members: ${[...members].join(', ')}`);
+      });
+
+      // Player rejects call
+      socket.on('call:reject', (data: { gameId: string }) => {
+        const username = socket.data.username as string;
+        socket.to(data.gameId).emit('call:rejected', { username });
+      });
+
+      // Relay WebRTC offer to target peer
+      socket.on('call:offer', (data: { to: string; offer: { type: string; sdp: string }; gameId: string }) => {
+        const from = socket.data.username as string;
+        const targetSock = this.connectedPlayers.get(data.to);
+        targetSock?.emit('call:offer', { from, offer: data.offer, gameId: data.gameId });
+      });
+
+      // Relay WebRTC answer to target peer
+      socket.on('call:answer', (data: { to: string; answer: { type: string; sdp: string }; gameId: string }) => {
+        const from = socket.data.username as string;
+        const targetSock = this.connectedPlayers.get(data.to);
+        targetSock?.emit('call:answer', { from, answer: data.answer, gameId: data.gameId });
+      });
+
+      // Relay ICE candidate to target peer
+      socket.on('call:ice', (data: { to: string; candidate: Record<string, unknown>; gameId: string }) => {
+        const from = socket.data.username as string;
+        const targetSock = this.connectedPlayers.get(data.to);
+        targetSock?.emit('call:ice', { from, candidate: data.candidate });
+      });
+
+      // Player leaves call
+      socket.on('call:leave', (data: { gameId: string }) => {
+        const username = socket.data.username as string;
+        const { gameId } = data;
+        this.callRooms.get(gameId)?.delete(username);
+        if (this.callRooms.get(gameId)?.size === 0) this.callRooms.delete(gameId);
+        socket.to(gameId).emit('call:peer_left', { username, gameId });
+        console.log(`📞 ${username} left call in game ${gameId}`);
       });
     });
   }

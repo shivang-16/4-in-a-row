@@ -85,6 +85,20 @@ export default function Home() {
   const [chatInput, setChatInput] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Call states
+  // callRoomActive: true when there's an ongoing call in this game room (we may or may not be in it)
+  const [callRoomActive, setCallRoomActive] = useState(false);
+  const [callRoomInitiator, setCallRoomInitiator] = useState<string | null>(null);
+  const [callMembers, setCallMembers] = useState<string[]>([]); // everyone currently in the call
+  const [amInCall, setAmInCall] = useState(false); // is the local player joined?
+  const [isMuted, setIsMuted] = useState(false);
+  const [callStartedAt, setCallStartedAt] = useState<number | null>(null); // epoch ms
+  const [callTimerDisplay, setCallTimerDisplay] = useState('0:00');
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  const callGameIdRef = useRef<string | null>(null); // gameId active when call was started
   
   // Audio states
   const [bgMusicEnabled, setBgMusicEnabled] = useState(false);
@@ -97,6 +111,7 @@ export default function Home() {
   // Refs for tracking state in socket event handlers
   const chatOpenRef = useRef(chatOpen);
   const usernameRef = useRef(username);
+  const playCallChimeRef = useRef<() => void>(() => {});
   const boardRef = useRef<HTMLDivElement>(null);
   const hoverStripRef = useRef<HTMLDivElement>(null);
   /** Preview disc position in the strip above the board (tracks pointer X, clamped to columns). */
@@ -105,7 +120,6 @@ export default function Home() {
   // Keep refs in sync with state
   useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
   useEffect(() => { usernameRef.current = username; }, [username]);
-  
   // Modal states
   const [showSpectateModal, setShowSpectateModal] = useState(false);
   const [showFriendModal, setShowFriendModal] = useState(false);
@@ -154,6 +168,19 @@ export default function Home() {
       window.visualViewport?.removeEventListener('scroll', read);
     };
   }, []);
+
+  // ── Call timer ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!callRoomActive || callStartedAt === null) return;
+    const fmt = (ms: number) => {
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      return `${m}:${String(s % 60).padStart(2, '0')}`;
+    };
+    setCallTimerDisplay(fmt(Date.now() - callStartedAt));
+    const id = setInterval(() => setCallTimerDisplay(fmt(Date.now() - callStartedAt!)), 1000);
+    return () => clearInterval(id);
+  }, [callRoomActive, callStartedAt]);
 
   const boardCols = board[0]?.length ?? DEFAULT_COLS;
   const boardRows = board.length;
@@ -418,6 +445,80 @@ export default function Home() {
       }
     });
 
+    // ── Call signaling events ─────────────────────────────────────────────
+    // Someone started a call in the room — show the floating call bar + play chime
+    newSocket.on('call:ringing', (data: { from: string; gameId: string }) => {
+      setCallRoomActive(true);
+      setCallRoomInitiator(data.from);
+      setCallStartedAt(Date.now());
+      playCallChimeRef.current();
+    });
+
+    // Server tells us who is already in the call (after we join)
+    newSocket.on('call:members', (data: { members: string[]; gameId: string }) => {
+      setCallMembers((prev) => [...new Set([...prev, ...data.members])]);
+    });
+
+    // Another peer joined — existing members must send them an offer
+    newSocket.on('call:peer_joined', async (data: { username: string; gameId: string }) => {
+      const gid = callGameIdRef.current ?? data.gameId;
+      setCallMembers((prev) => [...new Set([...prev, data.username])]);
+      const pc = getOrCreatePC(data.username, gid, newSocket);
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      newSocket.emit('call:offer', { to: data.username, offer, gameId: gid });
+    });
+
+    // Receive an offer — send back an answer
+    newSocket.on('call:offer', async (data: { from: string; offer: RTCSessionDescriptionInit; gameId: string }) => {
+      const gid = callGameIdRef.current ?? data.gameId;
+      setCallMembers((prev) => [...new Set([...prev, data.from])]);
+      const pc = getOrCreatePC(data.from, gid, newSocket);
+      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+      await flushCandidates(data.from);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      newSocket.emit('call:answer', { to: data.from, answer, gameId: gid });
+    });
+
+    // Receive an answer — complete the connection
+    newSocket.on('call:answer', async (data: { from: string; answer: RTCSessionDescriptionInit }) => {
+      const pc = peerConnectionsRef.current.get(data.from);
+      if (pc && pc.signalingState !== 'stable') {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+        await flushCandidates(data.from);
+      }
+    });
+
+    // Receive ICE candidate
+    newSocket.on('call:ice', async (data: { from: string; candidate: RTCIceCandidateInit }) => {
+      const pc = peerConnectionsRef.current.get(data.from);
+      if (pc && pc.remoteDescription) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch {}
+      } else {
+        const queue = pendingCandidatesRef.current.get(data.from) ?? [];
+        queue.push(data.candidate);
+        pendingCandidatesRef.current.set(data.from, queue);
+      }
+    });
+
+    // A peer left the call
+    newSocket.on('call:peer_left', (data: { username: string; gameId: string }) => {
+      peerConnectionsRef.current.get(data.username)?.close();
+      peerConnectionsRef.current.delete(data.username);
+      pendingCandidatesRef.current.delete(data.username);
+      setCallMembers((prev) => {
+        const next = prev.filter((u) => u !== data.username);
+        // If no one is left in the call, close the room
+        if (next.length === 0) {
+          setCallRoomActive(false);
+          setCallRoomInitiator(null);
+          setAmInCall(false);
+        }
+        return next;
+      });
+    });
+
     // Private room events
     newSocket.on('room:created', (data: { roomCode: string; maxPlayers?: number; players?: string[] }) => {
       console.log('🏠 Room created:', data.roomCode);
@@ -466,6 +567,7 @@ export default function Home() {
 
     return () => {
       newSocket.close();
+      cleanupCall();
     };
   }, []);
   
@@ -674,6 +776,7 @@ export default function Home() {
     setWinStreak(4);
     setRankings([]);
     setRankFlash(null);
+    cleanupCall();
   };
 
   const handlePlayAgain = () => {
@@ -701,10 +804,179 @@ export default function Home() {
   
   const handleSendChat = () => {
     if (!chatInput.trim() || !socket || !gameId) return;
-    
+
     socket.emit('chat:send', { gameId, username, message: chatInput });
     setChatInput('');
   };
+
+  // ── WebRTC call helpers ───────────────────────────────────────────────────
+  const STUN_SERVERS: RTCConfiguration = {
+    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+  };
+
+  /** Create or retrieve a peer connection for a given remote username. */
+  const getOrCreatePC = useCallback(
+    (remoteUser: string, gid: string, sock: Socket): RTCPeerConnection => {
+      if (peerConnectionsRef.current.has(remoteUser)) {
+        return peerConnectionsRef.current.get(remoteUser)!;
+      }
+      const pc = new RTCPeerConnection(STUN_SERVERS);
+
+      // Add local tracks
+      localStreamRef.current?.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current!));
+
+      // Play remote audio
+      pc.ontrack = (ev) => {
+        const audio = new Audio();
+        audio.srcObject = ev.streams[0] ?? null;
+        audio.autoplay = true;
+        document.body.appendChild(audio);
+        pc.addEventListener('connectionstatechange', () => {
+          if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+            audio.remove();
+          }
+        });
+      };
+
+      // Send ICE candidates
+      pc.onicecandidate = (ev) => {
+        if (ev.candidate) {
+          sock.emit('call:ice', { to: remoteUser, candidate: ev.candidate.toJSON(), gameId: gid });
+        }
+      };
+
+      peerConnectionsRef.current.set(remoteUser, pc);
+      pendingCandidatesRef.current.set(remoteUser, []);
+      return pc;
+    },
+    []
+  );
+
+  /** Flush any ICE candidates that arrived before remote description was set. */
+  const flushCandidates = useCallback(async (remoteUser: string) => {
+    const pc = peerConnectionsRef.current.get(remoteUser);
+    const queue = pendingCandidatesRef.current.get(remoteUser) ?? [];
+    pendingCandidatesRef.current.set(remoteUser, []);
+    for (const c of queue) {
+      try { await pc?.addIceCandidate(new RTCIceCandidate(c)); } catch {}
+    }
+  }, []);
+
+  /** Tear down all peer connections and release mic. */
+  /** Two-tone chime played for everyone when a call starts. */
+  const playCallChime = useCallback(() => {
+    try {
+      const ctx = new AudioContext();
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.28, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.7);
+
+      // First tone
+      const o1 = ctx.createOscillator();
+      o1.type = 'sine';
+      o1.frequency.setValueAtTime(880, ctx.currentTime);
+      o1.connect(gain);
+      o1.start(ctx.currentTime);
+      o1.stop(ctx.currentTime + 0.35);
+
+      // Second tone (slightly higher, delayed)
+      const o2 = ctx.createOscillator();
+      o2.type = 'sine';
+      o2.frequency.setValueAtTime(1320, ctx.currentTime + 0.18);
+      o2.connect(gain);
+      o2.start(ctx.currentTime + 0.18);
+      o2.stop(ctx.currentTime + 0.7);
+    } catch {}
+  }, []);
+  // Keep ref in sync so socket event handlers (closed over at mount) can call it
+  useEffect(() => { playCallChimeRef.current = playCallChime; }, [playCallChime]);
+
+  const cleanupCall = useCallback(() => {
+    peerConnectionsRef.current.forEach((pc) => pc.close());
+    peerConnectionsRef.current.clear();
+    pendingCandidatesRef.current.clear();
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    callGameIdRef.current = null;
+    setCallRoomActive(false);
+    setCallRoomInitiator(null);
+    setCallMembers([]);
+    setAmInCall(false);
+    setIsMuted(false);
+    setCallStartedAt(null);
+    setCallTimerDisplay('0:00');
+  }, []);
+
+  /** Initiate a call — broadcast ring to room, then join yourself. */
+  const handleStartCall = useCallback(async () => {
+    if (!socket || !gameId || callRoomActive) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+      callGameIdRef.current = gameId;
+      socket.emit('call:start', { gameId });
+      socket.emit('call:join', { gameId });
+      const now = Date.now();
+      setCallRoomActive(true);
+      setCallRoomInitiator(username);
+      setCallMembers([username]);
+      setAmInCall(true);
+      setCallStartedAt(now);
+      playCallChime();
+    } catch {
+      alert('Microphone access is required for calls.');
+    }
+  }, [socket, gameId, callRoomActive, username, playCallChime]);
+
+  /** Join an ongoing call. */
+  const handleJoinCall = useCallback(async () => {
+    if (!socket || !gameId || amInCall) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      localStreamRef.current = stream;
+      callGameIdRef.current = gameId;
+      socket.emit('call:join', { gameId });
+      setAmInCall(true);
+    } catch {
+      alert('Microphone access is required for calls.');
+    }
+  }, [socket, gameId, amInCall]);
+
+  /** Leave the ongoing call (but the call room stays open for others). */
+  const handleLeaveCall = useCallback(() => {
+    if (!socket || !callGameIdRef.current) return;
+    socket.emit('call:leave', { gameId: callGameIdRef.current });
+    // Tear down local WebRTC connections
+    peerConnectionsRef.current.forEach((pc) => pc.close());
+    peerConnectionsRef.current.clear();
+    pendingCandidatesRef.current.clear();
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    callGameIdRef.current = null;
+    setAmInCall(false);
+    setIsMuted(false);
+    setCallMembers((prev) => {
+      const next = prev.filter((u) => u !== username);
+      // If no one else is left, close the whole call room
+      if (next.length === 0) {
+        setCallRoomActive(false);
+        setCallRoomInitiator(null);
+        setCallStartedAt(null);
+        setCallTimerDisplay('0:00');
+      }
+      return next;
+    });
+  }, [socket, username]);
+
+  /** Toggle mic mute. */
+  const handleToggleMute = useCallback(() => {
+    localStreamRef.current?.getAudioTracks().forEach((t) => {
+      t.enabled = !t.enabled;
+    });
+    setIsMuted((m) => !m);
+  }, []);
 
   const getCellClass = (value: number) => {
     if (value >= 1 && value <= 8) return discClasses[value - 1];
@@ -1069,8 +1341,73 @@ export default function Home() {
         )}
       </div>
 
+      {/* ── Floating Call Bar — visible above game whenever a call is active ─── */}
+      {callRoomActive && gameStatus === 'playing' && (
+        <div className={`${styles.callFloatingBar} ${amInCall ? styles.callFloatingBarActive : ''}`}>
+          <span className={styles.callFloatingIcon}>{amInCall ? '🎙️' : '📞'}</span>
+          <div className={styles.callFloatingInfo}>
+            {amInCall ? (
+              <span className={styles.callFloatingLabel}>
+                Live&nbsp;
+                {callMembers.map((m) => (
+                  <span key={m} className={styles.callFloatingMember}>
+                    {m === username ? 'you' : m}
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <span className={styles.callFloatingLabel}>
+                <strong>{callRoomInitiator}</strong> started a call
+                {callMembers.length > 0 && (
+                  <> &middot; {callMembers.map((m) => m === username ? 'you' : m).join(', ')} in</>
+                )}
+              </span>
+            )}
+            <span className={styles.callFloatingTimer}>{callTimerDisplay}</span>
+          </div>
+          <div className={styles.callFloatingActions}>
+            {!amInCall ? (
+              <button className={`${styles.callFloatBtn} ${styles.callFloatBtnJoin}`} onClick={handleJoinCall}>
+                Join{callMembers.length > 0 && (
+                  <span className={styles.callMemberCount}>{callMembers.length}</span>
+                )}
+              </button>
+            ) : (
+              <>
+                <button
+                  className={`${styles.callFloatBtn} ${isMuted ? styles.callFloatBtnMuted : ''}`}
+                  onClick={handleToggleMute}
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted ? '🔇' : '🎙️'}
+                </button>
+                <button
+                  className={`${styles.callFloatBtn} ${styles.callFloatBtnLeave}`}
+                  onClick={handleLeaveCall}
+                  title="Leave call"
+                >
+                  Leave
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Chat Panel */}
       <div className={`${styles.chatPanel} ${chatOpen ? styles.chatOpen : ''}`}>
+        {/* Standalone call tab — sits above the chat tab on the right side */}
+        {gameStatus === 'playing' && gameMode !== 'bot' && gameMode !== null && (
+          <button
+            className={`${styles.callTabBtn} ${callRoomActive ? styles.callTabBtnActive : ''}`}
+            onClick={callRoomActive ? undefined : handleStartCall}
+            disabled={callRoomActive && !amInCall}
+            title={callRoomActive ? 'Call already in progress' : 'Start voice call'}
+          >
+            {callRoomActive ? '🔴' : '📞'}
+          </button>
+        )}
+
         <button className={styles.chatToggle} onClick={() => {
           if (!chatOpen) {
             setUnreadCount(0); // Reset unread count when opening chat
@@ -1085,7 +1422,9 @@ export default function Home() {
         
         {chatOpen && (
           <>
-            <div className={styles.chatHeader}>Chat</div>
+            <div className={styles.chatHeader}>
+              <span>Chat</span>
+            </div>
             <div className={styles.chatMessages}>
               {gameMode === 'bot' ? (
                 <div className={styles.chatMessage} style={{ textAlign: 'center', opacity: 0.7, marginTop: '50%' }}>
