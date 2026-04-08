@@ -773,6 +773,7 @@ export default function Home() {
   const handleColumnClick = (col: number) => {
     if (!gameId || !socket || !myPlayerNumber) return;
     if (winner) return; // game is over — nobody moves after a win
+    if (iAmRankedOut) return; // this player has already achieved their streak
     if (currentTurn !== myPlayerNumber) {
       console.log('⏳ Not your turn');
       return;
@@ -1123,7 +1124,8 @@ export default function Home() {
       ? playerUsernames[currentTurn - 1]
       : '…';
 
-  const isMyTurn = myPlayerNumber !== null && myPlayerNumber === currentTurn;
+  const iAmRankedOut = rankings.some((r) => r.username === username);
+  const isMyTurn = myPlayerNumber !== null && myPlayerNumber === currentTurn && !iAmRankedOut;
   const iAmWinner = winner === username;
   const isDraw = winReason === 'draw';
 
@@ -1343,7 +1345,9 @@ export default function Home() {
                {gameStatus === 'playing' && (
                  <div className={styles.turnLineSimple}>
                    <span className={styles.turnLineText}>
-                     {turnPlayerName === '…' ? '…' : isMyTurn ? 'Your turn' : `${turnPlayerName}'s turn`}
+                     {iAmRankedOut
+                       ? `You're ranked — watching`
+                       : turnPlayerName === '…' ? '…' : isMyTurn ? 'Your turn' : `${turnPlayerName}'s turn`}
                    </span>
                    <div
                      className={`${styles.turnIndicatorDisc} ${
