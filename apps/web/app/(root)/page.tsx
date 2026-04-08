@@ -1346,17 +1346,19 @@ export default function Home() {
                  <div className={styles.turnLineSimple}>
                    <span className={styles.turnLineText}>
                      {iAmRankedOut
-                       ? `You're ranked — watching`
+                       ? `You are rank #${rankings.find((r) => r.username === username)?.rank ?? '?'}`
                        : turnPlayerName === '…' ? '…' : isMyTurn ? 'Your turn' : `${turnPlayerName}'s turn`}
                    </span>
-                   <div
-                     className={`${styles.turnIndicatorDisc} ${
-                       currentTurn >= 1 && currentTurn <= 8
-                         ? discClasses[currentTurn - 1]
-                         : styles.p1DiscPreview
-                     }`}
-                     aria-hidden
-                   />
+                   {!iAmRankedOut && (
+                     <div
+                       className={`${styles.turnIndicatorDisc} ${
+                         currentTurn >= 1 && currentTurn <= 8
+                           ? discClasses[currentTurn - 1]
+                           : styles.p1DiscPreview
+                       }`}
+                       aria-hidden
+                     />
+                   )}
                  </div>
                )}
 

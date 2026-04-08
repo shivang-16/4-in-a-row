@@ -256,7 +256,11 @@ export class GameManager {
       console.log(`🧹 Cleaned up game ${gameId} from active games`);
     } else {
       const n = game.players.length;
-      const nextSlot = (slot + 1) % n;
+      let nextSlot = (slot + 1) % n;
+      // Skip ranked-out players (multiplayer ranking games)
+      while (game.players[nextSlot]?.rank != null) {
+        nextSlot = (nextSlot + 1) % n;
+      }
       game.currentTurn = slotIndexToCellValue(nextSlot);
 
       const nextPlayer = game.players[nextSlot];
