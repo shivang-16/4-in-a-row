@@ -95,10 +95,12 @@ export default function Home() {
   const [isMuted, setIsMuted] = useState(false);
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null); // epoch ms
   const [callTimerDisplay, setCallTimerDisplay] = useState('0:00');
+  const [speakingUsers, setSpeakingUsers] = useState<Set<string>>(new Set());
   const localStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const pendingCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const callGameIdRef = useRef<string | null>(null); // gameId active when call was started
+  const speakingStopFnsRef = useRef<Map<string, () => void>>(new Map());
   
   // Audio states
   const [bgMusicEnabled, setBgMusicEnabled] = useState(false);
@@ -831,6 +833,50 @@ export default function Home() {
     iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
   };
 
+  /** Start polling an audio stream's volume to detect when a user is speaking.
+   *  Returns a cleanup function that stops the polling. */
+  const startSpeakDetection = useCallback((user: string, stream: MediaStream) => {
+    // Stop any existing detector for this user
+    speakingStopFnsRef.current.get(user)?.();
+
+    try {
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      analyser.smoothingTimeConstant = 0.3;
+      source.connect(analyser);
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      const THRESHOLD = 18; // 0-255 RMS threshold
+      let speaking = false;
+
+      const tick = () => {
+        analyser.getByteFrequencyData(data);
+        const rms = data.reduce((s, v) => s + v, 0) / data.length;
+        const nowSpeaking = rms > THRESHOLD;
+        if (nowSpeaking !== speaking) {
+          speaking = nowSpeaking;
+          setSpeakingUsers((prev) => {
+            const next = new Set(prev);
+            nowSpeaking ? next.add(user) : next.delete(user);
+            return next;
+          });
+        }
+      };
+
+      const interval = setInterval(tick, 80);
+      const stop = () => {
+        clearInterval(interval);
+        ctx.close().catch(() => {});
+        setSpeakingUsers((prev) => { const n = new Set(prev); n.delete(user); return n; });
+      };
+      speakingStopFnsRef.current.set(user, stop);
+      return stop;
+    } catch {
+      return () => {};
+    }
+  }, []);
+
   /** Create or retrieve a peer connection for a given remote username. */
   const getOrCreatePC = useCallback(
     (remoteUser: string, gid: string, sock: Socket): RTCPeerConnection => {
@@ -853,11 +899,15 @@ export default function Home() {
         // we try to play() explicitly and ignore errors.
         audio.play().catch(() => {});
         document.body.appendChild(audio);
+        // Detect when this remote peer is speaking
+        startSpeakDetection(remoteUser, remoteStream);
         pc.addEventListener('connectionstatechange', () => {
           if (pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
             audio.pause();
             audio.srcObject = null;
             audio.remove();
+            speakingStopFnsRef.current.get(remoteUser)?.();
+            speakingStopFnsRef.current.delete(remoteUser);
           }
         });
       };
@@ -924,6 +974,10 @@ export default function Home() {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
     callGameIdRef.current = null;
+    // Stop all speak detectors
+    speakingStopFnsRef.current.forEach((stop) => stop());
+    speakingStopFnsRef.current.clear();
+    setSpeakingUsers(new Set());
     setCallRoomActive(false);
     setCallRoomInitiator(null);
     setCallMembers([]);
@@ -940,6 +994,7 @@ export default function Home() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
       callGameIdRef.current = gameId;
+      startSpeakDetection(username, stream);
       socket.emit('call:start', { gameId });
       socket.emit('call:join', { gameId });
       const now = Date.now();
@@ -952,7 +1007,7 @@ export default function Home() {
     } catch {
       alert('Microphone access is required for calls.');
     }
-  }, [socket, gameId, callRoomActive, username, playCallChime]);
+  }, [socket, gameId, callRoomActive, username, playCallChime, startSpeakDetection]);
 
   /** Join an ongoing call. */
   const handleJoinCall = useCallback(async () => {
@@ -961,6 +1016,7 @@ export default function Home() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       localStreamRef.current = stream;
       callGameIdRef.current = gameId;
+      startSpeakDetection(username, stream);
       // Add local tracks to any peer connections that were created before the stream
       // was available (e.g. if we received an offer before mic was ready).
       peerConnectionsRef.current.forEach((pc) => {
@@ -974,7 +1030,7 @@ export default function Home() {
     } catch {
       alert('Microphone access is required for calls.');
     }
-  }, [socket, gameId, amInCall]);
+  }, [socket, gameId, amInCall, username, startSpeakDetection]);
 
   /** Leave the ongoing call (but the call room stays open for others). */
   const handleLeaveCall = useCallback(() => {
@@ -987,6 +1043,10 @@ export default function Home() {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
     callGameIdRef.current = null;
+    // Stop all speak detectors (local + any remaining remote)
+    speakingStopFnsRef.current.forEach((stop) => stop());
+    speakingStopFnsRef.current.clear();
+    setSpeakingUsers(new Set());
     setAmInCall(false);
     setIsMuted(false);
     setCallMembers((prev) => {
@@ -1146,7 +1206,7 @@ export default function Home() {
                 const rankEmoji = playerRank === 1 ? '🥇' : playerRank === 2 ? '🥈' : playerRank === 3 ? '🥉' : playerRank ? `#${playerRank}` : null;
                 const isRankedOut = playerRank != null;
                 return (
-                  <div key={`${name}-${i}`} className={`${styles.rosterRow} ${isRankedOut ? styles.rosterRankedOut : ''}`}>
+                  <div key={`${name}-${i}`} className={`${styles.rosterRow} ${isRankedOut ? styles.rosterRankedOut : ''} ${speakingUsers.has(name) ? styles.rosterRowSpeaking : ''}`}>
                     <span className={`${styles.rosterSwatch} ${discClasses[i] ?? ''}`} />
                     <span
                       className={`${styles.playerName} ${
@@ -1157,6 +1217,7 @@ export default function Home() {
                       {name === username ? ' (you)' : ''}
                     </span>
                     {rankEmoji && <span className={styles.rankBadge}>{rankEmoji}</span>}
+                    {speakingUsers.has(name) && <span className={styles.speakingIcon}>🔊</span>}
                   </div>
                 );
               })}
@@ -1165,10 +1226,11 @@ export default function Home() {
         ) : (
           <>
             <div className={styles.playerProfile}>
-              <div className={styles.avatarBox}>
+              <div className={`${styles.avatarBox} ${speakingUsers.has(opponent ?? '') ? styles.avatarBoxSpeaking : ''}`}>
                 <span className={styles.avatar}>💡</span>
               </div>
               <span className={styles.playerName}>{opponent || 'Waiting...'}</span>
+              {speakingUsers.has(opponent ?? '') && <span className={styles.speakingIcon}>🔊</span>}
               <div className={`${styles.miniDisc} ${styles.p2DiscPreview}`}></div>
             </div>
             <div className={styles.vsBadge}>
@@ -1177,7 +1239,8 @@ export default function Home() {
             <div className={styles.playerProfile}>
               <div className={`${styles.miniDisc} ${styles.p1DiscPreview}`}></div>
               <span className={styles.playerName}>(You) {username || 'Player'}</span>
-              <div className={styles.avatarBox}>
+              {speakingUsers.has(username) && <span className={styles.speakingIcon}>🔊</span>}
+              <div className={`${styles.avatarBox} ${speakingUsers.has(username) ? styles.avatarBoxSpeaking : ''}`}>
                 <span className={styles.avatar}>😎</span>
               </div>
             </div>
