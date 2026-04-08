@@ -518,6 +518,11 @@ export class WebSocketService {
         socket.to(gameId).emit('call:peer_left', { username, gameId });
         console.log(`📞 ${username} left call in game ${gameId}`);
       });
+
+      socket.on('call:mute', (data: { gameId: string; muted: boolean }) => {
+        const username = socket.data.username as string;
+        socket.to(data.gameId).emit('call:mute', { username, muted: data.muted });
+      });
     });
   }
 

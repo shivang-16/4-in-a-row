@@ -57,6 +57,11 @@
   border-color: #22c55e;
   box-shadow: 0 0 10px rgba(34, 197, 94, 0.55);
 }
+
+.avatarBoxMuted {
+  border-color: #f87171;
+  box-shadow: 0 0 8px rgba(248, 113, 113, 0.45);
+}
 .avatar {
   font-size: 3rem;
 }
@@ -967,6 +972,11 @@
   box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
 }
 
+.rosterRowMuted {
+  border-color: #f87171;
+  box-shadow: 0 0 6px rgba(248, 113, 113, 0.4);
+}
+
 .rosterRankedOut {
   /* dim the row content but not the badge — handled per-child below */
 }
@@ -1006,6 +1016,13 @@
   line-height: 1;
   animation: speakPulse 0.6s ease-in-out infinite;
   flex-shrink: 0;
+}
+
+.mutedIcon {
+  font-size: 0.85rem;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.85;
 }
 
 .rosterSwatch {
@@ -1266,10 +1283,10 @@
   
   .playerName {
     font-size: 0.85rem;
-    max-width: 100px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    max-width: 120px;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    white-space: normal;
   }
   
   .mainArea {
@@ -1447,7 +1464,10 @@
   
   .playerName {
     font-size: 0.7rem;
-    max-width: 70px;
+    max-width: 90px;
+    overflow-wrap: break-word;
+    word-break: break-word;
+    white-space: normal;
   }
   
   .playerProfile {

@@ -93,6 +93,7 @@ export default function Home() {
   const [callMembers, setCallMembers] = useState<string[]>([]); // everyone currently in the call
   const [amInCall, setAmInCall] = useState(false); // is the local player joined?
   const [isMuted, setIsMuted] = useState(false);
+  const [mutedUsers, setMutedUsers] = useState<Set<string>>(new Set());
   const [callStartedAt, setCallStartedAt] = useState<number | null>(null); // epoch ms
   const [callTimerDisplay, setCallTimerDisplay] = useState('0:00');
   const [speakingUsers, setSpeakingUsers] = useState<Set<string>>(new Set());
@@ -525,6 +526,8 @@ export default function Home() {
       peerConnectionsRef.current.get(data.username)?.close();
       peerConnectionsRef.current.delete(data.username);
       pendingCandidatesRef.current.delete(data.username);
+      // Clear their mute state when they leave
+      setMutedUsers((prev) => { const n = new Set(prev); n.delete(data.username); return n; });
       setCallMembers((prev) => {
         const next = prev.filter((u) => u !== data.username);
         // If no one is left in the call, close the room
@@ -533,6 +536,15 @@ export default function Home() {
           setCallRoomInitiator(null);
           setAmInCall(false);
         }
+        return next;
+      });
+    });
+
+    // A peer toggled their mute
+    newSocket.on('call:mute', (data: { username: string; muted: boolean }) => {
+      setMutedUsers((prev) => {
+        const next = new Set(prev);
+        data.muted ? next.add(data.username) : next.delete(data.username);
         return next;
       });
     });
@@ -978,6 +990,7 @@ export default function Home() {
     speakingStopFnsRef.current.forEach((stop) => stop());
     speakingStopFnsRef.current.clear();
     setSpeakingUsers(new Set());
+    setMutedUsers(new Set());
     setCallRoomActive(false);
     setCallRoomInitiator(null);
     setCallMembers([]);
@@ -1047,6 +1060,7 @@ export default function Home() {
     speakingStopFnsRef.current.forEach((stop) => stop());
     speakingStopFnsRef.current.clear();
     setSpeakingUsers(new Set());
+    setMutedUsers(new Set());
     setAmInCall(false);
     setIsMuted(false);
     setCallMembers((prev) => {
@@ -1067,8 +1081,21 @@ export default function Home() {
     localStreamRef.current?.getAudioTracks().forEach((t) => {
       t.enabled = !t.enabled;
     });
-    setIsMuted((m) => !m);
-  }, []);
+    setIsMuted((m) => {
+      const nowMuted = !m;
+      // Broadcast mute state to other call participants
+      if (socket && callGameIdRef.current) {
+        socket.emit('call:mute', { gameId: callGameIdRef.current, muted: nowMuted });
+      }
+      // Update own entry in mutedUsers
+      setMutedUsers((prev) => {
+        const next = new Set(prev);
+        nowMuted ? next.add(username) : next.delete(username);
+        return next;
+      });
+      return nowMuted;
+    });
+  }, [socket, username]);
 
   const getCellClass = (value: number) => {
     if (value >= 1 && value <= 8) return discClasses[value - 1];
@@ -1206,7 +1233,7 @@ export default function Home() {
                 const rankEmoji = playerRank === 1 ? '🥇' : playerRank === 2 ? '🥈' : playerRank === 3 ? '🥉' : playerRank ? `#${playerRank}` : null;
                 const isRankedOut = playerRank != null;
                 return (
-                  <div key={`${name}-${i}`} className={`${styles.rosterRow} ${isRankedOut ? styles.rosterRankedOut : ''} ${speakingUsers.has(name) ? styles.rosterRowSpeaking : ''}`}>
+                  <div key={`${name}-${i}`} className={`${styles.rosterRow} ${isRankedOut ? styles.rosterRankedOut : ''} ${speakingUsers.has(name) ? styles.rosterRowSpeaking : mutedUsers.has(name) ? styles.rosterRowMuted : ''}`}>
                     <span className={`${styles.rosterSwatch} ${discClasses[i] ?? ''}`} />
                     <span
                       className={`${styles.playerName} ${
@@ -1218,6 +1245,7 @@ export default function Home() {
                     </span>
                     {rankEmoji && <span className={styles.rankBadge}>{rankEmoji}</span>}
                     {speakingUsers.has(name) && <span className={styles.speakingIcon}>🔊</span>}
+                    {mutedUsers.has(name) && !speakingUsers.has(name) && <span className={styles.mutedIcon}>🔇</span>}
                   </div>
                 );
               })}
@@ -1226,11 +1254,12 @@ export default function Home() {
         ) : (
           <>
             <div className={styles.playerProfile}>
-              <div className={`${styles.avatarBox} ${speakingUsers.has(opponent ?? '') ? styles.avatarBoxSpeaking : ''}`}>
+              <div className={`${styles.avatarBox} ${speakingUsers.has(opponent ?? '') ? styles.avatarBoxSpeaking : ''} ${mutedUsers.has(opponent ?? '') ? styles.avatarBoxMuted : ''}`}>
                 <span className={styles.avatar}>💡</span>
               </div>
               <span className={styles.playerName}>{opponent || 'Waiting...'}</span>
               {speakingUsers.has(opponent ?? '') && <span className={styles.speakingIcon}>🔊</span>}
+              {mutedUsers.has(opponent ?? '') && !speakingUsers.has(opponent ?? '') && <span className={styles.mutedIcon}>🔇</span>}
               <div className={`${styles.miniDisc} ${styles.p2DiscPreview}`}></div>
             </div>
             <div className={styles.vsBadge}>
@@ -1240,7 +1269,8 @@ export default function Home() {
               <div className={`${styles.miniDisc} ${styles.p1DiscPreview}`}></div>
               <span className={styles.playerName}>(You) {username || 'Player'}</span>
               {speakingUsers.has(username) && <span className={styles.speakingIcon}>🔊</span>}
-              <div className={`${styles.avatarBox} ${speakingUsers.has(username) ? styles.avatarBoxSpeaking : ''}`}>
+              {mutedUsers.has(username) && !speakingUsers.has(username) && <span className={styles.mutedIcon}>🔇</span>}
+              <div className={`${styles.avatarBox} ${speakingUsers.has(username) ? styles.avatarBoxSpeaking : ''} ${mutedUsers.has(username) ? styles.avatarBoxMuted : ''}`}>
                 <span className={styles.avatar}>😎</span>
               </div>
             </div>
