@@ -33,9 +33,9 @@ function computeBoardLayout(
   // On desktop the left sidebar is 180px; on mobile it collapses to a top bar
   const sidebarW = narrow ? 0 : 180;
   // Reserve space for fixed chat/call tabs on the right
-  const chatStrip = narrow ? 62 : 78;
-  const outerPad = narrow ? 4 : 10;
-  const boardPadding = narrow ? (multiPlayer ? 4 : 6) : 14;
+  const chatStrip = narrow ? 58 : 78;
+  const outerPad = narrow ? 2 : 10;
+  const boardPadding = narrow ? (multiPlayer ? 3 : 4) : 14;
 
   const maxBoardWidth = Math.max(140, viewportWidth - sidebarW - chatStrip - outerPad * 2);
   const innerW = maxBoardWidth - boardPadding * 2;
@@ -44,15 +44,14 @@ function computeBoardLayout(
   let cellSize = Math.floor((innerW - (c - 1) * gap) / c);
   gap = Math.max(2, Math.min(10, Math.round(cellSize * 0.12)));
   cellSize = Math.floor((innerW - (c - 1) * gap) / c);
-  // Raise the cell size ceiling — width-driven size is usually the real constraint
-  cellSize = Math.max(12, Math.min(narrow ? (multiPlayer ? 112 : 104) : 92, cellSize));
+  cellSize = Math.max(12, Math.min(narrow ? (multiPlayer ? 116 : 108) : 92, cellSize));
   gap = Math.max(2, Math.min(10, Math.round(cellSize * 0.12)));
 
   // Reserve space for status banner + hover strip
-  const statusReserve = narrow ? (multiPlayer ? 72 : 100) : 100;
+  const statusReserve = narrow ? (multiPlayer ? 60 : 80) : 100;
   const hoverReserve = Math.min(72, Math.round(cellSize * 1.1) + 16);
   // Use much more of the vertical space on desktop
-  const heightFraction = narrow ? (multiPlayer ? 0.80 : 0.70) : (multiPlayer ? 0.72 : 0.67);
+  const heightFraction = narrow ? (multiPlayer ? 0.86 : 0.78) : (multiPlayer ? 0.72 : 0.67);
   const maxBoardHeight = Math.max(
     160,
     Math.min(viewportHeight * heightFraction, viewportHeight - statusReserve - hoverReserve)

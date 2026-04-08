@@ -1292,6 +1292,7 @@
   
   .mainArea {
     padding: 10px;
+    padding-top: 4px;
   }
   
   .cell {
@@ -1477,6 +1478,7 @@
   
   .mainArea {
     padding: 5px;
+    padding-top: 2px;
   }
   
   .cell {
