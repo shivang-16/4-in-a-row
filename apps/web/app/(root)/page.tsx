@@ -28,9 +28,9 @@ function computeBoardLayout(
   const r = Math.max(1, rows);
   const narrow = viewportWidth < 720;
   /* Reserve space for fixed chat tab on the right (~65px + margin) */
-  const chatStrip = 78;
-  const outerPad = narrow ? 8 : 16;
-  const boardPadding = narrow ? 10 : 20;
+  const chatStrip = narrow ? 62 : 78;
+  const outerPad = narrow ? 4 : 16;
+  const boardPadding = narrow ? 6 : 20;
   const maxBoardWidth = Math.max(140, viewportWidth - chatStrip - outerPad * 2);
   const innerW = maxBoardWidth - boardPadding * 2;
 
@@ -38,14 +38,14 @@ function computeBoardLayout(
   let cellSize = Math.floor((innerW - (c - 1) * gap) / c);
   gap = Math.max(2, Math.min(10, Math.round(cellSize * 0.12)));
   cellSize = Math.floor((innerW - (c - 1) * gap) / c);
-  cellSize = Math.max(12, Math.min(88, cellSize));
+  cellSize = Math.max(12, Math.min(narrow ? 104 : 88, cellSize));
   gap = Math.max(2, Math.min(10, Math.round(cellSize * 0.12)));
 
-  const statusReserve = narrow ? 120 : 100;
+  const statusReserve = narrow ? 100 : 100;
   const hoverReserve = Math.min(72, Math.round(cellSize * 1.1) + 16);
   const maxBoardHeight = Math.max(
     160,
-    Math.min(viewportHeight * 0.58, viewportHeight - statusReserve - hoverReserve)
+    Math.min(viewportHeight * (narrow ? 0.70 : 0.58), viewportHeight - statusReserve - hoverReserve)
   );
   const innerH = maxBoardHeight - boardPadding * 2 - (r - 1) * gap;
   const byHeight = Math.floor(innerH / r);
@@ -749,6 +749,7 @@ export default function Home() {
 
   const handleColumnClick = (col: number) => {
     if (!gameId || !socket || !myPlayerNumber) return;
+    if (winner) return; // game is over — nobody moves after a win
     if (currentTurn !== myPlayerNumber) {
       console.log('⏳ Not your turn');
       return;
@@ -1430,12 +1431,15 @@ export default function Home() {
         {/* Standalone call tab — sits above the chat tab on the right side */}
         {gameStatus === 'playing' && gameMode !== 'bot' && gameMode !== null && (
           <button
-            className={`${styles.callTabBtn} ${callRoomActive ? styles.callTabBtnActive : ''}`}
+            className={`${styles.callTabBtn} ${callRoomActive ? styles.callTabBtnDisabled : ''}`}
             onClick={callRoomActive ? undefined : handleStartCall}
-            disabled={callRoomActive && !amInCall}
+            disabled={callRoomActive}
             title={callRoomActive ? 'Call already in progress' : 'Start voice call'}
           >
-            {callRoomActive ? '🔴' : '📞'}
+            <span className={styles.callTabBtnInner}>
+              {'📞'}
+              {callRoomActive && <span className={styles.callTabBtnCross}>✕</span>}
+            </span>
           </button>
         )}
 

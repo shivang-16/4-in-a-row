@@ -1250,26 +1250,26 @@
   }
   
   .cell {
-    width: 55px;
-    height: 55px;
+    width: 62px;
+    height: 62px;
   }
   
   .floatingDisc {
-    width: 40px;
-    height: 40px;
+    width: 46px;
+    height: 46px;
   }
   
   .hoverStripOutside {
-    min-height: 50px;
+    min-height: 56px;
   }
   
   .board {
-    padding: 12px;
-    gap: 6px;
+    padding: 14px;
+    gap: 7px;
   }
   
   .row {
-    gap: 6px;
+    gap: 7px;
   }
   
   .statusBanner {
@@ -1432,8 +1432,8 @@
   }
   
   .cell {
-    width: 42px;
-    height: 42px;
+    width: 48px;
+    height: 48px;
   }
   
   .disc {
@@ -1739,13 +1739,45 @@
   left: -70px;
 }
 
-.callTabBtnActive {
-  background: linear-gradient(180deg, #22c55e 0%, #16a34a 50%, #15803d 100%);
-  border-color: #166534;
-  box-shadow: -4px 4px 0px #14532d,
-              -4px 8px 10px rgba(0,0,0,0.3),
-              0 0 10px rgba(34, 197, 94, 0.35);
-  opacity: 0.92;
+.callTabBtn:disabled:hover {
+  filter: none;
+  left: -70px;
+}
+
+.callTabBtnDisabled {
+  background: linear-gradient(180deg, #374151 0%, #1f2937 50%, #111827 100%);
+  border-color: #111827;
+  box-shadow: -4px 4px 0px #0a0f1a,
+              -4px 8px 10px rgba(0,0,0,0.3);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #9ca3af;
+}
+
+.callTabBtnInner {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.callTabBtnCross {
+  position: absolute;
+  top: -7px;
+  right: -9px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.55rem;
+  font-weight: 900;
+  line-height: 1;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid #fff;
+  pointer-events: none;
 }
 
 .chatHeader {
