@@ -20,8 +20,8 @@ export const MAX_PLAYERS_PER_GAME = 8;
 /** Larger boards for 3+ players. Capped so UI stays reasonable. */
 export function boardSizeForPlayerCount(playerCount: number): { rows: number; cols: number } {
   const n = Math.max(2, Math.min(MAX_PLAYERS_PER_GAME, Math.floor(playerCount)));
-  const rows = Math.min(14, 6 + Math.ceil((n - 2) * 1.2));
-  const cols = Math.min(16, 7 + (n - 2) * 2);
+  const rows = Math.min(16, 6 + Math.ceil((n - 2) * 2.5));
+  const cols = Math.min(18, 7 + (n - 2) * 3);
   return { rows, cols };
 }
 

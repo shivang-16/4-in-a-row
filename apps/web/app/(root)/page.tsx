@@ -22,30 +22,40 @@ function computeBoardLayout(
   cols: number,
   rows: number,
   viewportWidth: number,
-  viewportHeight: number
+  viewportHeight: number,
+  numPlayers: number = 2
 ): { cellSize: number; gap: number } {
   const c = Math.max(1, cols);
   const r = Math.max(1, rows);
   const narrow = viewportWidth < 720;
-  /* Reserve space for fixed chat tab on the right (~65px + margin) */
+  const multiPlayer = numPlayers > 2;
+
+  // On desktop the left sidebar is 180px; on mobile it collapses to a top bar
+  const sidebarW = narrow ? 0 : 180;
+  // Reserve space for fixed chat/call tabs on the right
   const chatStrip = narrow ? 62 : 78;
-  const outerPad = narrow ? 4 : 16;
-  const boardPadding = narrow ? 6 : 20;
-  const maxBoardWidth = Math.max(140, viewportWidth - chatStrip - outerPad * 2);
+  const outerPad = narrow ? 4 : 10;
+  const boardPadding = narrow ? (multiPlayer ? 4 : 6) : 14;
+
+  const maxBoardWidth = Math.max(140, viewportWidth - sidebarW - chatStrip - outerPad * 2);
   const innerW = maxBoardWidth - boardPadding * 2;
 
   let gap = 4;
   let cellSize = Math.floor((innerW - (c - 1) * gap) / c);
   gap = Math.max(2, Math.min(10, Math.round(cellSize * 0.12)));
   cellSize = Math.floor((innerW - (c - 1) * gap) / c);
-  cellSize = Math.max(12, Math.min(narrow ? 104 : 88, cellSize));
+  // Raise the cell size ceiling — width-driven size is usually the real constraint
+  cellSize = Math.max(12, Math.min(narrow ? (multiPlayer ? 112 : 104) : 92, cellSize));
   gap = Math.max(2, Math.min(10, Math.round(cellSize * 0.12)));
 
-  const statusReserve = narrow ? 100 : 100;
+  // Reserve space for status banner + hover strip
+  const statusReserve = narrow ? (multiPlayer ? 72 : 100) : 100;
   const hoverReserve = Math.min(72, Math.round(cellSize * 1.1) + 16);
+  // Use much more of the vertical space on desktop
+  const heightFraction = narrow ? (multiPlayer ? 0.80 : 0.70) : (multiPlayer ? 0.72 : 0.67);
   const maxBoardHeight = Math.max(
     160,
-    Math.min(viewportHeight * (narrow ? 0.70 : 0.58), viewportHeight - statusReserve - hoverReserve)
+    Math.min(viewportHeight * heightFraction, viewportHeight - statusReserve - hoverReserve)
   );
   const innerH = maxBoardHeight - boardPadding * 2 - (r - 1) * gap;
   const byHeight = Math.floor(innerH / r);
@@ -188,8 +198,8 @@ export default function Home() {
   const boardCols = board[0]?.length ?? DEFAULT_COLS;
   const boardRows = board.length;
   const boardLayout = useMemo(
-    () => computeBoardLayout(boardCols, boardRows, viewport.width, viewport.height),
-    [boardCols, boardRows, viewport.width, viewport.height]
+    () => computeBoardLayout(boardCols, boardRows, viewport.width, viewport.height, playerUsernames.length),
+    [boardCols, boardRows, viewport.width, viewport.height, playerUsernames.length]
   );
 
   const discClasses = useMemo(
