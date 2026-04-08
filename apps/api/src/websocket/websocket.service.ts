@@ -22,6 +22,8 @@ export class WebSocketService {
   /** Invite-game rematch: same partyId across games until everyone votes to play again */
   private rematchPlayers: Map<string, string[]> = new Map();
   private rematchVotes: Map<string, Set<string>> = new Map();
+  /** Countdown timers: start when first vote arrives; fires after 10s to start with whoever voted */
+  private rematchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   constructor(httpServer: HTTPServer) {
     // Define allowed origins
@@ -94,10 +96,9 @@ export class WebSocketService {
       });
 
       // Handle creating a private room (Play with Friend)
-      socket.on('room:create', (data: { username: string; maxPlayers?: number }) => {
+      socket.on('room:create', (data: { username: string }) => {
         const { username } = data;
-        const raw = data.maxPlayers ?? 2;
-        const maxPlayers = Math.min(MAX_PLAYERS_PER_GAME, Math.max(2, Math.floor(raw)));
+        const maxPlayers = MAX_PLAYERS_PER_GAME; // host picks when starting; cap at 8
 
         // IMPORTANT: Remove player from matchmaking queue if they were there
         matchmakingService.leaveQueue(username);
@@ -111,12 +112,13 @@ export class WebSocketService {
         socket.data.waitingRoomCode = roomCode;
         socket.join(`waiting-${roomCode}`);
 
-        console.log(`🏠 Room created: ${roomCode} by ${username} (max ${maxPlayers} players)`);
+        console.log(`🏠 Room created: ${roomCode} by ${username}`);
 
-        socket.emit('room:created', { roomCode, maxPlayers, players: [username] });
+        socket.emit('room:created', { roomCode, hostUsername: username, players: [username] });
         this.io.to(`waiting-${roomCode}`).emit('room:lobbyUpdate', {
           players: [...members.keys()],
           maxPlayers,
+          hostUsername: username,
         });
       });
 
@@ -165,6 +167,7 @@ export class WebSocketService {
         this.io.to(`waiting-${normalizedCode}`).emit('room:lobbyUpdate', {
           players: playerList,
           maxPlayers: room.maxPlayers,
+          hostUsername: room.hostUsername,
         });
 
         if (playerList.length < room.maxPlayers) {
@@ -172,6 +175,7 @@ export class WebSocketService {
             roomCode: normalizedCode,
             players: playerList,
             maxPlayers: room.maxPlayers,
+            hostUsername: room.hostUsername,
           });
           return;
         }
@@ -224,11 +228,40 @@ export class WebSocketService {
           this.io.to(`waiting-${code}`).emit('room:lobbyUpdate', {
             players: playerList,
             maxPlayers: room.maxPlayers,
+            hostUsername: room.hostUsername,
           });
           console.log(`🚪 ${username} left waiting room ${code}`);
         }
 
         socket.data.roomCode = null;
+      });
+
+      // Host manually starts the game with whoever is in the room
+      socket.on('room:start', (data?: { winStreak?: number }) => {
+        const code = (socket.data.roomCode || socket.data.waitingRoomCode) as string | undefined;
+        if (!code) return;
+        const room = this.privateRooms.get(code);
+        if (!room) return;
+        const username = socket.data.username as string;
+        if (room.hostUsername !== username) {
+          socket.emit('room:error', { message: 'Only the host can start the game.' });
+          return;
+        }
+        const playerList = [...room.members.keys()];
+        if (playerList.length < 2) {
+          socket.emit('room:error', { message: 'Need at least 2 players to start.' });
+          return;
+        }
+        for (const u of playerList) matchmakingService.leaveQueue(u);
+        this.privateRooms.delete(code);
+        for (const s of room.members.values()) {
+          s.data.roomCode = null;
+          s.data.waitingRoomCode = null;
+          s.leave(`waiting-${code}`);
+        }
+        const participants = playerList.map((u) => ({ username: u, isBot: false }));
+        gameManager.createGame(participants, { isInviteGame: true, winStreak: data?.winStreak });
+        console.log(`🎮 Host started private game: ${playerList.join(', ')} (winStreak: ${data?.winStreak ?? 'default'})`);
       });
 
       // Handle game moves
@@ -318,18 +351,26 @@ export class WebSocketService {
         
         console.log(`🔄 Player reconnected: ${username} to game ${gameId}`);
         
-        // Get current game state
         const game = gameManager.getGame(gameId);
         if (game) {
+          const players = game.players;
+          const usernames = players.map((p) => p.username);
+          const seat = players.findIndex((p) => p.username === username);
           socket.emit('game:state', {
             gameId,
             board: game.board,
             currentTurn: game.currentTurn,
             status: game.status,
+            players: usernames,
+            playerUsernames: usernames,
+            yourPlayerNumber: seat + 1,
+            winStreak: game.winStreak,
+            rankings: game.rankedOut ?? [],
+            partyId: game.partyId,
+            isInviteGame: game.isInviteGame,
           });
         }
         
-        // Send Kafka event
         kafkaService.sendGameEvent(GameEventType.PLAYER_RECONNECTED, {
           gameId,
           username,
@@ -353,36 +394,44 @@ export class WebSocketService {
         }
         const votes = this.rematchVotes.get(partyId)!;
         votes.add(username);
-        this.broadcastRematchProgress(partyId);
 
-        if (votes.size < players.length) return;
+        // Active = original players whose socket is still connected right now
+        const activePlayers = players.filter((u) => this.connectedPlayers.get(u)?.connected);
 
-        const offline = players.filter((u) => !this.connectedPlayers.has(u));
-        if (offline.length > 0) {
-          votes.clear();
-          for (const u of players) {
+        if (activePlayers.length < 2) {
+          this.cleanupRematch(partyId);
+          for (const u of activePlayers) {
             this.connectedPlayers.get(u)?.emit('rematch:error', {
-              message: 'Everyone must be connected to rematch.',
+              message: 'Not enough players connected to rematch.',
             });
           }
           return;
         }
 
-        this.rematchVotes.delete(partyId);
-        this.rematchPlayers.delete(partyId);
+        // Broadcast current progress (only counting active voters)
+        const activeVotes = [...votes].filter((u) => activePlayers.includes(u));
+        const progressPayload = {
+          partyId,
+          votes: activeVotes.length,
+          needed: activePlayers.length,
+          voted: activeVotes,
+        };
+        for (const u of activePlayers) {
+          this.connectedPlayers.get(u)?.emit('rematch:progress', progressPayload);
+        }
 
-        try {
-          gameManager.createGame(
-            players.map((u) => ({ username: u, isBot: false })),
-            { isInviteGame: true, partyId }
-          );
-        } catch (e) {
-          console.error('Rematch failed:', e);
-          for (const u of players) {
-            this.connectedPlayers.get(u)?.emit('rematch:error', {
-              message: 'Could not start rematch.',
-            });
-          }
+        // Start a 10s countdown on the FIRST vote so late/disconnected players don't block
+        if (!this.rematchTimers.has(partyId)) {
+          const timer = setTimeout(() => {
+            console.log(`⏰ Rematch timeout for party ${partyId} — starting with voters`);
+            this.startRematchWithVoters(partyId);
+          }, 30000);
+          this.rematchTimers.set(partyId, timer);
+        }
+
+        // If all active players already voted, start immediately
+        if (activeVotes.length >= activePlayers.length) {
+          this.startRematchWithVoters(partyId);
         }
       });
 
@@ -397,6 +446,49 @@ export class WebSocketService {
         console.log(`💬 Chat message from ${data.username} in game ${gameId}: ${message}`);
       });
     });
+  }
+
+  /** Called when timer fires OR all active players voted. Starts game with whoever voted. */
+  private startRematchWithVoters(partyId: string) {
+    const players = this.rematchPlayers.get(partyId);
+    const votes = this.rematchVotes.get(partyId);
+    if (!players || !votes) return; // already cleaned up
+
+    // Participants = voted AND currently connected
+    const participants = [...votes].filter((u) => this.connectedPlayers.get(u)?.connected);
+
+    this.cleanupRematch(partyId);
+
+    if (participants.length < 2) {
+      console.log(`⚠️  Rematch for ${partyId} cancelled — not enough voters (${participants.length})`);
+      for (const u of participants) {
+        this.connectedPlayers.get(u)?.emit('rematch:error', {
+          message: 'Not enough players ready to start the rematch.',
+        });
+      }
+      return;
+    }
+
+    try {
+      gameManager.createGame(
+        participants.map((u) => ({ username: u, isBot: false })),
+        { isInviteGame: true, partyId }
+      );
+      console.log(`🔁 Rematch started for party ${partyId}: ${participants.join(', ')}`);
+    } catch (e) {
+      console.error('Rematch failed:', e);
+      for (const u of participants) {
+        this.connectedPlayers.get(u)?.emit('rematch:error', { message: 'Could not start rematch.' });
+      }
+    }
+  }
+
+  private cleanupRematch(partyId: string) {
+    const timer = this.rematchTimers.get(partyId);
+    if (timer) clearTimeout(timer);
+    this.rematchTimers.delete(partyId);
+    this.rematchVotes.delete(partyId);
+    this.rematchPlayers.delete(partyId);
   }
 
   /** Notifies each human participant and joins them to the Socket.IO game room */
@@ -431,8 +523,8 @@ export class WebSocketService {
         opponent: others.length === 1 ? others[0] : undefined,
         isInviteGame: Boolean(game.isInviteGame),
         partyId: game.partyId,
-        scoringMode: Boolean(game.scoringMode),
-        scores: game.scoringMode ? game.scores : undefined,
+        winStreak: game.winStreak,
+        rankings: game.rankedOut ?? [],
       });
       console.log(`✅ Sent game:started to ${p.username} (seat ${index + 1}/${players.length})`);
     });
@@ -458,24 +550,11 @@ export class WebSocketService {
 
   public registerInviteRematch(partyId: string, orderedHumanUsernames: string[]) {
     if (!partyId || orderedHumanUsernames.length < 2) return;
+    // Clear any leftover timer from a previous rematch cycle
+    this.cleanupRematch(partyId);
     this.rematchPlayers.set(partyId, [...orderedHumanUsernames]);
     this.rematchVotes.set(partyId, new Set());
     console.log(`🔁 Rematch ready for party ${partyId}: ${orderedHumanUsernames.join(', ')}`);
-  }
-
-  private broadcastRematchProgress(partyId: string) {
-    const players = this.rematchPlayers.get(partyId);
-    const votes = this.rematchVotes.get(partyId);
-    if (!players || !votes) return;
-    const payload = {
-      partyId,
-      votes: votes.size,
-      needed: players.length,
-      voted: [...votes],
-    };
-    for (const u of players) {
-      this.connectedPlayers.get(u)?.emit('rematch:progress', payload);
-    }
   }
 
   // Emit game end event
@@ -488,8 +567,6 @@ export class WebSocketService {
       partyId?: string;
       canRematch?: boolean;
       rematchPlayers?: string[];
-      scores?: number[];
-      scoringMode?: boolean;
     }
   ) {
     this.io.to(gameId).emit('game:ended', {
@@ -501,8 +578,6 @@ export class WebSocketService {
       partyId: rematch?.partyId,
       canRematch: rematch?.canRematch,
       rematchPlayers: rematch?.rematchPlayers,
-      scores: rematch?.scores,
-      scoringMode: rematch?.scoringMode,
     });
 
     kafkaService.sendGameEvent(GameEventType.GAME_ENDED, {

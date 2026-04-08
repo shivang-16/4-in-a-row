@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef, useMemo, useCallback, type CSSProperties } from 'react';
+import { useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import styles from './game.module.css';
 
@@ -57,6 +58,7 @@ function computeBoardLayout(
 }
 
 export default function Home() {
+  const router = useRouter();
   const [socket, setSocket] = useState<Socket | null>(null);
   const [username, setUsername] = useState('');
   const [gameId, setGameId] = useState<string | null>(null);
@@ -71,9 +73,12 @@ export default function Home() {
   const [isConnected, setIsConnected] = useState(false);
   const [gameMode, setGameMode] = useState<'pvp' | 'bot' | 'friend' | null>(null);
   const [moveCount, setMoveCount] = useState(0);
-  /** 3+ players: count 4-in-a-rows until board is full */
-  const [scoringMode, setScoringMode] = useState(false);
-  const [scores, setScores] = useState<number[]>([]);
+  /** How many in a row needed to win this game (4 for 2-player, 6 for 3+) */
+  const [winStreak, setWinStreak] = useState(4);
+  /** Multiplayer ranking: players ranked in order they achieved their streak */
+  const [rankings, setRankings] = useState<{ username: string; rank: number }[]>([]);
+  /** Brief flash shown when a player ranks out in multiplayer */
+  const [rankFlash, setRankFlash] = useState<{ username: string; rank: number } | null>(null);
   
   // Chat states
   const [chatMessages, setChatMessages] = useState<Array<{username: string, message: string, timestamp: Date}>>([]);
@@ -87,6 +92,7 @@ export default function Home() {
   const dropSoundRef = useRef<HTMLAudioElement | null>(null);
   const opponentDropSoundRef = useRef<HTMLAudioElement | null>(null);
   const gameEndSoundRef = useRef<HTMLAudioElement | null>(null);
+  const lastMoveSentAt = useRef<number>(0);
   
   // Refs for tracking state in socket event handlers
   const chatOpenRef = useRef(chatOpen);
@@ -120,6 +126,7 @@ export default function Home() {
   const [rematchVotes, setRematchVotes] = useState(0);
   const [rematchNeeded, setRematchNeeded] = useState(0);
   const [hasVotedRematch, setHasVotedRematch] = useState(false);
+  const [rematchError, setRematchError] = useState('');
   
   // UI feedback states
   const [usernameShake, setUsernameShake] = useState(false);
@@ -190,6 +197,16 @@ export default function Home() {
     newSocket.on('connect', () => {
       console.log('✅ Connected to server');
       setIsConnected(true);
+      // If we arrived here from a room lobby, rejoin the existing game socket room
+      const reconnectRaw = sessionStorage.getItem('4inarow_reconnectGame');
+      if (reconnectRaw) {
+        sessionStorage.removeItem('4inarow_reconnectGame');
+        try {
+          const { gameId, username } = JSON.parse(reconnectRaw) as { gameId: string; username: string };
+          newSocket.emit('player:join', { username });
+          newSocket.emit('game:reconnect', { gameId, username });
+        } catch { /* ignore */ }
+      }
     });
 
     newSocket.on('disconnect', () => {
@@ -208,16 +225,13 @@ export default function Home() {
       isBot: boolean;
       isInviteGame?: boolean;
       partyId?: string;
-      scoringMode?: boolean;
-      scores?: number[];
+      winStreak?: number;
+      rankings?: { username: string; rank: number }[];
     }) => {
       console.log('🎮 Game started:', data);
       setGameId(data.gameId);
       const names = data.playerUsernames ?? data.players ?? [];
       setPlayerUsernames(names);
-      if (data.board?.length && data.board[0]?.length) {
-        setBoard(data.board);
-      }
       if (names.length === 2) {
         setOpponent(data.opponent ?? names.find((u) => u !== usernameRef.current) ?? '');
       } else {
@@ -225,6 +239,12 @@ export default function Home() {
       }
       setGameStatus('playing');
       setMoveCount(0);
+      setWinner(null);
+      setWinReason(null);
+      setWinningCells([]);
+      setBoard(data.board?.length && data.board[0]?.length
+        ? data.board
+        : emptyBoard(DEFAULT_ROWS, DEFAULT_COLS));
       setShowFriendModal(false);
       setMyRoomCode(null);
       setIsWaitingInRoom(false);
@@ -233,6 +253,9 @@ export default function Home() {
       setLobbyPlayers([]);
       setMyPlayerNumber(data.yourPlayerNumber);
       setCurrentTurn(1);
+      setWinStreak(data.winStreak ?? 4);
+      setRankings(data.rankings ?? []);
+      setRankFlash(null);
       if (data.isBot) setGameMode('bot');
       else if (data.isInviteGame) setGameMode('friend');
       else setGameMode('pvp');
@@ -240,9 +263,37 @@ export default function Home() {
       setHasVotedRematch(false);
       setRematchVotes(0);
       setRematchNeeded(0);
-      setScoringMode(Boolean(data.scoringMode));
-      setScores(Array.isArray(data.scores) ? data.scores : []);
       console.log(`✅ Seat ${data.yourPlayerNumber}, isBot: ${data.isBot}`);
+    });
+
+    // Received when reconnecting to an existing game (e.g. after navigating from lobby)
+    newSocket.on('game:state', (data: {
+      gameId: string;
+      board: Board;
+      currentTurn: number;
+      status: string;
+      players?: string[];
+      playerUsernames?: string[];
+      yourPlayerNumber?: number;
+      winStreak?: number;
+      rankings?: { username: string; rank: number }[];
+      partyId?: string;
+      isInviteGame?: boolean;
+    }) => {
+      console.log('🔄 Game state received on reconnect:', data);
+      if (data.board?.length) setBoard(data.board);
+      setCurrentTurn(data.currentTurn ?? 1);
+      const names = data.playerUsernames ?? data.players ?? [];
+      if (names.length) {
+        setPlayerUsernames(names);
+        if (names.length === 2) {
+          setOpponent(names.find((u) => u !== usernameRef.current) ?? '');
+        }
+      }
+      if (data.yourPlayerNumber != null) setMyPlayerNumber(data.yourPlayerNumber);
+      if (data.winStreak != null) setWinStreak(data.winStreak);
+      if (data.rankings) setRankings(data.rankings);
+      if (data.partyId) setInvitePartyId(data.partyId);
     });
 
     newSocket.on(
@@ -250,11 +301,11 @@ export default function Home() {
       (data: {
         board?: Board;
         currentTurn?: number;
-        scores?: number[];
-        scoringMode?: boolean;
         playerUsernames?: string[];
         playerLeft?: string;
         lastMove?: { player: string; column: number; row: number };
+        rankEvent?: { username: string; rank: number; winningCells?: { row: number; col: number }[] };
+        rankings?: { username: string; rank: number }[];
       }) => {
       console.log('📥 Game update:', data);
       if (data.board) {
@@ -283,11 +334,22 @@ export default function Home() {
       if (data.currentTurn !== undefined) {
         setCurrentTurn(data.currentTurn);
       }
-      if (data.scoringMode !== undefined) {
-        setScoringMode(data.scoringMode);
+      if (data.rankings) {
+        setRankings(data.rankings);
       }
-      if (data.scores && Array.isArray(data.scores)) {
-        setScores(data.scores);
+      if (data.rankEvent) {
+        // Flash winning cells for ranked-out player, then clear after 2.5s
+        if (data.rankEvent.winningCells) {
+          setWinningCells(data.rankEvent.winningCells);
+          setTimeout(() => setWinningCells([]), 2500);
+        }
+        setRankFlash(data.rankEvent);
+        setTimeout(() => setRankFlash(null), 2500);
+        // Play win sound on every rank-out (same sound as game over)
+        if (gameEndSoundRef.current) {
+          gameEndSoundRef.current.currentTime = 0;
+          gameEndSoundRef.current.play().catch((e: any) => console.log('Sound play failed:', e));
+        }
       }
     });
 
@@ -300,15 +362,11 @@ export default function Home() {
         partyId?: string;
         canRematch?: boolean;
         rematchPlayers?: string[];
-        scores?: number[];
-        scoringMode?: boolean;
       }) => {
         console.log('🏁 Game ended:', data);
         setGameStatus('ended');
         setWinner(data.winner);
         setWinReason(data.reason);
-        if (data.scoringMode !== undefined) setScoringMode(data.scoringMode);
-        if (data.scores && Array.isArray(data.scores)) setScores(data.scores);
 
         if (data.winningCells) {
           setWinningCells(data.winningCells);
@@ -347,7 +405,8 @@ export default function Home() {
 
     newSocket.on('rematch:error', (data: { message?: string }) => {
       setHasVotedRematch(false);
-      alert(data.message ?? 'Rematch failed.');
+      setRematchError(data.message ?? 'Rematch failed.');
+      setTimeout(() => setRematchError(''), 4000);
     });
     
     // Chat event
@@ -402,8 +461,7 @@ export default function Home() {
     });
 
     newSocket.on('game:error', (data) => {
-      console.error('❌ Game error:', data.message);
-      alert(data.message);
+      console.warn('⚠️ Game error:', data.message);
     });
 
     return () => {
@@ -431,6 +489,49 @@ export default function Home() {
       const gameEndSound = new Audio('/game_end.mp3'); 
       gameEndSound.volume = 0.6;
       gameEndSoundRef.current = gameEndSound;
+    }
+  }, []);
+
+  // Restore pending game started from the /room/[code] lobby page
+  useEffect(() => {
+    const raw = sessionStorage.getItem('4inarow_pendingGame');
+    if (!raw) return;
+    sessionStorage.removeItem('4inarow_pendingGame');
+    try {
+      const data = JSON.parse(raw) as {
+        username: string;
+        gameId: string;
+        board?: Board;
+        rows?: number;
+        cols?: number;
+        players?: string[];
+        playerUsernames?: string[];
+        yourPlayerNumber: number;
+        isBot: boolean;
+        isInviteGame?: boolean;
+        partyId?: string;
+        winStreak?: number;
+      };
+      const u = data.username;
+      if (!u) return;
+      setUsername(u);
+      sessionStorage.setItem('4inarow_username', u);
+      setGameId(data.gameId);
+      const names = data.playerUsernames ?? data.players ?? [];
+      setPlayerUsernames(names);
+      if (data.board?.length) setBoard(data.board);
+      setMyPlayerNumber(data.yourPlayerNumber);
+      setCurrentTurn(1);
+      setWinStreak(data.winStreak ?? 4);
+      if (names.length === 2) setOpponent(names.find((n) => n !== u) ?? '');
+      setGameStatus('playing');
+      setGameMode(data.isInviteGame ? 'friend' : 'pvp');
+      if (data.partyId) setInvitePartyId(data.partyId);
+      setMoveCount(0);
+      // Store so the socket useEffect can pick it up once the socket is ready
+      sessionStorage.setItem('4inarow_reconnectGame', JSON.stringify({ gameId: data.gameId, username: u }));
+    } catch {
+      // ignore malformed data
     }
   }, []);
   
@@ -488,17 +589,19 @@ export default function Home() {
   };
 
   const handleCreateRoom = () => {
-    if (!socket) return;
-    socket.emit('player:join', { username });
-    socket.emit('room:create', { username, maxPlayers: friendMaxPlayers });
+    if (!username.trim()) return;
+    sessionStorage.setItem('4inarow_username', username.trim());
+    sessionStorage.setItem('4inarow_createRoom', '1');
+    router.push('/room/new');
   };
 
   const handleJoinRoom = () => {
     if (!socket || !friendRoomCode.trim()) return;
     setRoomError(null);
     setGameMode('friend');
+    sessionStorage.setItem('4inarow_username', username.trim());
     socket.emit('player:join', { username });
-    socket.emit('room:join', { username, roomCode: friendRoomCode });
+    router.push(`/room/${friendRoomCode.trim().toUpperCase()}`);
   };
 
   const handleCancelRoom = () => {
@@ -528,18 +631,18 @@ export default function Home() {
 
   const handleColumnClick = (col: number) => {
     if (!gameId || !socket || !myPlayerNumber) return;
-    
-    // Check if it's my turn
     if (currentTurn !== myPlayerNumber) {
       console.log('⏳ Not your turn');
       return;
     }
-
-    // Check if column is full
     if (board[0]?.[col] !== 0) {
       console.log('❌ Column is full');
       return;
     }
+    // Debounce: ignore duplicate clicks within 300 ms (hover strip + cell both fire)
+    const now = Date.now();
+    if (now - lastMoveSentAt.current < 300) return;
+    lastMoveSentAt.current = now;
 
     console.log(`🎯 Making move: column ${col}`);
     socket.emit('game:move', { gameId, column: col });
@@ -567,14 +670,26 @@ export default function Home() {
     setRematchVotes(0);
     setRematchNeeded(0);
     setHasVotedRematch(false);
-    setScoringMode(false);
-    setScores([]);
+    setRematchError('');
+    setWinStreak(4);
+    setRankings([]);
+    setRankFlash(null);
   };
 
   const handlePlayAgain = () => {
     if (invitePartyId && socket && gameMode === 'friend') {
+      // Rematch with same party (invite flow)
       socket.emit('party:rematch', { partyId: invitePartyId });
       setHasVotedRematch(true);
+      return;
+    }
+    if (gameMode === 'friend') {
+      // Room-started game: send host back to create a new room, others to join
+      const savedUsername = username;
+      resetToMainMenu();
+      sessionStorage.setItem('4inarow_username', savedUsername);
+      sessionStorage.setItem('4inarow_createRoom', '1');
+      window.location.href = '/room/new';
       return;
     }
     resetToMainMenu();
@@ -694,8 +809,6 @@ export default function Home() {
 
   const getWinReasonText = () => {
     if (isDraw) return 'Board Full - Draw!';
-    if (winReason === 'most_points') return 'Most 4-in-a-rows when board filled!';
-    if (winReason === 'score_tie') return 'Tied on 4-in-a-rows!';
     switch (winReason) {
       case 'horizontal': return '→ Horizontal Win!';
       case 'vertical': return '↓ Vertical Win!';
@@ -707,13 +820,6 @@ export default function Home() {
   };
 
   const endGameHeadline = () => {
-    if (scoringMode && (winReason === 'most_points' || winReason === 'score_tie')) {
-      if (winReason === 'score_tie' || !winner) {
-        return 'TIE GAME!';
-      }
-      if (winner === username) return 'YOU WIN!';
-      return `${winner} WINS!`;
-    }
     if (winner === username) return 'YOU WIN!';
     if (winner) return `${winner} WINS!`;
     return 'DRAW!';
@@ -728,25 +834,28 @@ export default function Home() {
         {playerUsernames.length > 2 ? (
           <>
             <p className={styles.friendSectionTitle} style={{ marginBottom: 8 }}>
-              Players{scoringMode ? ' · points' : ''}
+              Players
             </p>
             <div className={styles.playersRoster}>
-              {playerUsernames.map((name, i) => (
-                <div key={`${name}-${i}`} className={styles.rosterRow}>
-                  <span className={`${styles.rosterSwatch} ${discClasses[i] ?? ''}`} />
-                  <span
-                    className={`${styles.playerName} ${
-                      currentTurn === i + 1 ? styles.rosterCurrent : ''
-                    }`}
-                  >
-                    {name}
-                    {name === username ? ' (you)' : ''}
-                    {scoringMode && (
-                      <span style={{ opacity: 0.85, marginLeft: 6 }}>· {scores[i] ?? 0} pts</span>
-                    )}
-                  </span>
-                </div>
-              ))}
+              {playerUsernames.map((name, i) => {
+                const playerRank = rankings.find((r) => r.username === name)?.rank;
+                const rankEmoji = playerRank === 1 ? '🥇' : playerRank === 2 ? '🥈' : playerRank === 3 ? '🥉' : playerRank ? `#${playerRank}` : null;
+                const isRankedOut = playerRank != null;
+                return (
+                  <div key={`${name}-${i}`} className={`${styles.rosterRow} ${isRankedOut ? styles.rosterRankedOut : ''}`}>
+                    <span className={`${styles.rosterSwatch} ${discClasses[i] ?? ''}`} />
+                    <span
+                      className={`${styles.playerName} ${
+                        currentTurn === i + 1 && !isRankedOut ? styles.rosterCurrent : ''
+                      }`}
+                    >
+                      {name}
+                      {name === username ? ' (you)' : ''}
+                    </span>
+                    {rankEmoji && <span className={styles.rankBadge}>{rankEmoji}</span>}
+                  </div>
+                );
+              })}
             </div>
           </>
         ) : (
@@ -828,7 +937,7 @@ export default function Home() {
                {gameStatus === 'playing' && (
                  <div className={styles.turnLineSimple}>
                    <span className={styles.turnLineText}>
-                     {turnPlayerName === '…' ? '…' : `${turnPlayerName}'s turn`}
+                     {turnPlayerName === '…' ? '…' : isMyTurn ? 'Your turn' : `${turnPlayerName}'s turn`}
                    </span>
                    <div
                      className={`${styles.turnIndicatorDisc} ${
@@ -841,55 +950,57 @@ export default function Home() {
                  </div>
                )}
 
+               {/* Rank flash — briefly shown when a player achieves their streak in multiplayer */}
+               {rankFlash && (
+                 <div className={styles.rankFlashBanner}>
+                   <span className={styles.rankFlashEmoji}>
+                     {rankFlash.rank === 1 ? '🥇' : rankFlash.rank === 2 ? '🥈' : rankFlash.rank === 3 ? '🥉' : `#${rankFlash.rank}`}
+                   </span>
+                   <span className={styles.rankFlashText}>
+                     {rankFlash.username === username ? 'You' : rankFlash.username} ranked #{rankFlash.rank}!
+                   </span>
+                 </div>
+               )}
+
                {gameStatus === 'ended' && (
                  <div className={styles.statusBanner}>
-                    <span className={styles.statusIcon}>🏆</span>
-                    <span className={styles.statusText}>
-                      {endGameHeadline()}
-                      <span className={styles.statusSubtext}> - {getWinReasonText()}</span>
-                    </span>
-                    {scoringMode && scores.length > 0 && (
-                      <div className={styles.statusSubtext} style={{ width: '100%', textAlign: 'center' }}>
-                        Final:{' '}
-                        {playerUsernames.map((n, i) => (
-                          <span key={n + i} style={{ marginRight: 10 }}>
-                            {n} {scores[i] ?? 0}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {invitePartyId && gameMode === 'friend' ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                        <button
-                          type="button"
-                          onClick={handlePlayAgain}
-                          className={styles.playAgainBtn}
-                          disabled={hasVotedRematch}
-                        >
-                          {hasVotedRematch ? 'Waiting for others…' : 'Play again (same players)'}
-                        </button>
-                        {rematchNeeded > 0 && (
-                          <span className={styles.statusSubtext}>
-                            {rematchVotes} / {rematchNeeded} ready for rematch
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={handleLeaveToMenu}
-                          className={styles.playAgainBtn}
-                          style={{
-                            background: 'linear-gradient(180deg, #64748b 0%, #475569 100%)',
-                            boxShadow: '0 4px 0 #334155',
-                          }}
-                        >
-                          Leave to menu
-                        </button>
-                      </div>
-                    ) : (
-                      <button type="button" onClick={handlePlayAgain} className={styles.playAgainBtn}>
-                        Play Again
-                      </button>
-                    )}
+                   <div className={styles.statusTop}>
+                     <span className={styles.statusIcon}>🏆</span>
+                     <span className={styles.statusText}>{endGameHeadline()}</span>
+                     <span className={styles.statusSubtext}>{getWinReasonText()}</span>
+                   </div>
+                   <div className={styles.statusActions}>
+                     {gameMode === 'friend' ? (
+                       <>
+                         <button
+                           type="button"
+                           onClick={handlePlayAgain}
+                           className={styles.playAgainBtn}
+                           disabled={hasVotedRematch}
+                         >
+                           {hasVotedRematch
+                             ? `${rematchVotes}/${rematchNeeded} ready… (auto-starts in 30s)`
+                             : 'Play Again'}
+                         </button>
+                         <button
+                           type="button"
+                           onClick={handleLeaveToMenu}
+                           className={`${styles.playAgainBtn} ${styles.leaveBtn}`}
+                         >
+                           Leave
+                         </button>
+                         {rematchError && (
+                           <span className={styles.statusSubtext} style={{ color: '#f87171', width: '100%', textAlign: 'center' }}>
+                             {rematchError}
+                           </span>
+                         )}
+                       </>
+                     ) : (
+                       <button type="button" onClick={handlePlayAgain} className={styles.playAgainBtn}>
+                         Play Again
+                       </button>
+                     )}
+                   </div>
                  </div>
                )}
 
@@ -934,7 +1045,10 @@ export default function Home() {
                              key={colIndex}
                              className={styles.cell}
                              data-col={colIndex}
-                             onClick={() => handleColumnClick(colIndex)}
+                             onClick={() => {
+                              if (gameStatus !== 'playing' || !isMyTurn || winner) return;
+                              handleColumnClick(colIndex);
+                            }}
                            >
                              <div className={styles.hole}>
                                {cell !== 0 && (
@@ -1029,110 +1143,42 @@ export default function Home() {
             <div className={styles.modalIcon}>👥</div>
             <h2 className={styles.modalTitle}>Play with Friends</h2>
             
-            {!isWaitingInRoom && !friendJoinWaiting ? (
-              <>
-                <div className={styles.friendSection}>
-                  <p className={styles.friendSectionTitle}>Create a room</p>
-                  <div className={styles.maxPlayersRow}>
-                    <label className={styles.maxPlayersLabel} htmlFor="max-players">
-                      Total players in this game (2–8)
-                    </label>
-                    <select
-                      id="max-players"
-                      className={styles.maxPlayersSelect}
-                      value={friendMaxPlayers}
-                      onChange={(e) => setFriendMaxPlayers(Number(e.target.value))}
-                    >
-                      {[2, 3, 4, 5, 6, 7, 8].map((n) => (
-                        <option key={n} value={n}>
-                          {n} players
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <p className={styles.waitingText} style={{ fontSize: '0.85rem', marginTop: 0 }}>
-                    Invite {friendMaxPlayers - 1} friend{friendMaxPlayers > 2 ? 's' : ''} with the room code.
-                    3+ players: bigger board, unique colors, and score mode — most 4-in-a-rows when the board fills wins.
-                  </p>
-                  <button className={`${styles.button} ${styles.buttonFriend}`} onClick={handleCreateRoom}>
-                    🏠 Create room
-                  </button>
-                </div>
-                
-                <div className={styles.friendDivider}>
-                  <span>OR</span>
-                </div>
-                
-                <div className={styles.friendSection}>
-                  <p className={styles.friendSectionTitle}>Join a room</p>
-                  <input
-                    type="text"
-                    value={friendRoomCode}
-                    onChange={(e) => setFriendRoomCode(e.target.value.toUpperCase())}
-                    placeholder="Enter Room Code"
-                    className={styles.roomCodeInput}
-                    maxLength={6}
-                  />
-                  <button 
-                    className={`${styles.button} ${styles.buttonSecondary}`} 
-                    onClick={handleJoinRoom}
-                    disabled={!friendRoomCode.trim()}
-                  >
-                    🚀 Join room
-                  </button>
-                </div>
-                
-                {roomError && (
-                  <p className={styles.roomError}>{roomError}</p>
-                )}
-              </>
-            ) : (
-              <>
-                <div className={styles.friendSection}>
-                  {isWaitingInRoom ? (
-                    <>
-                      <p className={styles.friendSectionTitle}>Your room code</p>
-                      <div className={styles.roomCodeDisplay}>
-                        <span className={styles.roomCode}>{myRoomCode}</span>
-                        <button 
-                          className={styles.copyButton}
-                          onClick={() => {
-                            navigator.clipboard.writeText(myRoomCode || '');
-                            setCodeCopied(true);
-                            setTimeout(() => setCodeCopied(false), 2000);
-                          }}
-                        >
-                          {codeCopied ? '✓ Copied!' : '📋 Copy'}
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className={styles.friendSectionTitle}>Room {friendRoomCode}</p>
-                      <p className={styles.waitingText}>You&apos;re in the lobby.</p>
-                    </>
-                  )}
-                  <p className={styles.waitingText}>
-                    {lobbyPlayers.length} / {roomMaxPlayers} players joined
-                  </p>
-                  <ul className={styles.lobbyPlayerList}>
-                    {lobbyPlayers.map((p, i) => (
-                      <li key={`${p}-${i}`}>
-                        <span className={`${styles.rosterSwatch} ${discClasses[i] ?? ''}`} style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: 8 }} />
-                        {p}
-                        {p === username ? ' (you)' : ''}
-                      </li>
-                    ))}
-                  </ul>
-                  <p className={styles.waitingText}>
-                    ⏳ Waiting for more players…
-                  </p>
-                  <button className={`${styles.button} ${styles.cancelBtn}`} onClick={handleCancelRoom}>
-                    {isWaitingInRoom ? 'Cancel room' : 'Leave lobby'}
-                  </button>
-                </div>
-              </>
-            )}
+            <div className={styles.friendSection}>
+                <p className={styles.friendSectionTitle}>Create a Room</p>
+                <p style={{ color: '#a0a0cc', fontSize: '0.82rem', margin: 0, textAlign: 'center' }}>
+                  You&apos;ll be taken to a lobby. Share the link with friends — no player limit to set.
+                </p>
+                <button className={`${styles.button} ${styles.buttonFriend}`} onClick={handleCreateRoom}>
+                  🏠 Create Room
+                </button>
+              </div>
+
+              <div className={styles.friendDivider}>
+                <span>OR</span>
+              </div>
+
+              <div className={`${styles.friendSection} ${styles.friendSectionJoin}`}>
+                <p className={styles.friendSectionTitle}>Join a Room</p>
+                <input
+                  type="text"
+                  value={friendRoomCode}
+                  onChange={(e) => setFriendRoomCode(e.target.value.toUpperCase())}
+                  placeholder="Enter Room Code"
+                  className={styles.roomCodeInput}
+                  maxLength={6}
+                />
+                <button
+                  className={`${styles.button} ${styles.buttonSecondary}`}
+                  onClick={handleJoinRoom}
+                  disabled={!friendRoomCode.trim()}
+                >
+                  🚀 Join Room
+                </button>
+              </div>
+
+              {roomError && (
+                <p className={styles.roomError}>{roomError}</p>
+              )}
           </div>
         </div>
       )}

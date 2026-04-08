@@ -280,21 +280,26 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  padding: 20px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 14px;
+  box-sizing: border-box;
 }
 
 .friendSectionTitle {
   font-size: 1rem;
-  color: #ccc;
+  color: #e0aaff;
   margin: 0;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
+  font-weight: bold;
 }
 
 .friendDivider {
   width: 100%;
   display: flex;
   align-items: center;
-  margin: 15px 0;
+  margin: 10px 0;
 }
 
 .friendDivider::before,
@@ -397,6 +402,12 @@
   text-align: center;
 }
 
+/* Join section gets a distinct tint */
+.friendSectionJoin {
+  background: rgba(100, 68, 160, 0.18);
+  border: 1px solid rgba(160, 68, 255, 0.3);
+}
+
 /* Modal System */
 .modalOverlay {
   position: fixed;
@@ -417,38 +428,38 @@
   background: #2d1b4e;
   border: 4px solid #a044ff;
   border-radius: 20px;
-  padding: 40px;
+  padding: 32px 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
   position: relative;
-  max-width: 400px;
-  width: 90%;
+  max-width: 560px;
+  width: 92%;
   box-shadow: 0 0 30px rgba(160, 68, 255, 0.4);
   animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  max-height: 92vh;
+  overflow-y: auto;
 }
 
 .modalIcon {
-  font-size: 4rem;
-  margin-bottom: 20px;
+  font-size: 2.8rem;
+  margin-bottom: 8px;
   filter: drop-shadow(0 5px 10px rgba(0,0,0,0.5));
 }
 
 .modalTitle {
-  font-size: 2.5rem;
+  font-size: 1.8rem;
   background: linear-gradient(180deg, #e0aaff 0%, #a044ff 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  color: #a044ff; /* Fallback */
+  color: #a044ff;
   text-align: center;
-  margin-bottom: 15px;
+  margin-bottom: 18px;
   text-transform: uppercase;
-  /* 3D Drop Shadow for Depth */
-  filter: drop-shadow(0px 4px 0px #5a1a9e) 
-          drop-shadow(0px 6px 10px rgba(0,0,0,0.5));
+  filter: drop-shadow(0px 3px 0px #5a1a9e) 
+          drop-shadow(0px 5px 8px rgba(0,0,0,0.5));
   letter-spacing: 1px;
-  transform: rotate(-1deg);
 }
 
 .modalSubtitle {
@@ -576,37 +587,60 @@
 /* Status Banner (Game End only) */
 .statusBanner {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 15px;
-  padding: 15px 30px;
-  margin-bottom: 15px;
-  background: rgba(45, 27, 78, 0.9);
-  border-radius: 50px;
-  border: 2px solid rgba(160, 68, 255, 0.5);
-  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.4);
-  min-width: 0;
-  max-width: 100%;
+  gap: 10px;
+  padding: 14px 24px;
+  margin-bottom: 20px;
   width: 100%;
   box-sizing: border-box;
 }
 
+.statusTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.statusActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.statusScores {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.statusScoreItem {
+  font-size: 0.85rem;
+  color: #ccc;
+}
+
 .statusIcon {
-  font-size: 1.8rem;
+  font-size: 1.5rem;
+  line-height: 1;
 }
 
 .statusText {
-  font-size: 1.3rem;
+  font-size: 1.25rem;
   font-weight: bold;
   color: #fff;
   text-transform: uppercase;
   letter-spacing: 1px;
+  line-height: 1;
 }
 
 .statusSubtext {
-  font-size: 0.9rem;
-  font-weight: normal;
-  color: #ccc;
+  font-size: 0.8rem;
+  color: #b0a0cc;
   text-transform: none;
 }
 
@@ -641,6 +675,19 @@
 .playAgainBtn:active {
   transform: translateY(4px);
   box-shadow: 0 0 0 #1e8449;
+}
+
+.leaveBtn {
+  background: linear-gradient(180deg, #64748b 0%, #475569 100%);
+  box-shadow: 0 4px 0 #334155;
+}
+
+.leaveBtn:hover {
+  filter: brightness(1.1);
+}
+
+.leaveBtn:active {
+  box-shadow: 0 0 0 #334155;
 }
 
 /* Wraps the outside preview strip + wood board so widths stay aligned */
@@ -905,6 +952,35 @@
   letter-spacing: 0.5px;
 }
 
+.rosterRankedOut {
+  /* dim the row content but not the badge — handled per-child below */
+}
+
+.rosterRankedOut .rosterSwatch,
+.rosterRankedOut .playerName {
+  opacity: 0.45;
+}
+
+/* Badge stays fully bright even when player is ranked out */
+.rosterRankedOut .rankBadge {
+  opacity: 1;
+}
+
+.rankBadge {
+  margin-left: auto;
+  font-size: 1rem;
+  line-height: 1;
+  background: rgba(255, 215, 0, 0.18);
+  border: 1px solid rgba(255, 215, 0, 0.45);
+  border-radius: 8px;
+  padding: 2px 7px;
+  color: #fde68a;
+  font-weight: bold;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.7);
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.25);
+  white-space: nowrap;
+}
+
 .rosterSwatch {
   width: 22px;
   height: 22px;
@@ -916,6 +992,38 @@
 .rosterCurrent {
   color: #fde68a;
   text-shadow: 0 0 8px rgba(250, 204, 21, 0.6);
+}
+
+/* Rank flash banner shown briefly when a player achieves their streak */
+.rankFlashBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 18px;
+  margin-bottom: 8px;
+  background: rgba(255, 215, 0, 0.15);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  border-radius: 12px;
+  animation: rankFlashIn 0.3s ease;
+}
+
+.rankFlashEmoji {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.rankFlashText {
+  font-size: 0.95rem;
+  font-weight: bold;
+  color: #fde68a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+@keyframes rankFlashIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .maxPlayersRow {
@@ -1063,6 +1171,42 @@
     justify-content: space-between;
     gap: 10px;
   }
+
+  /* Multiplayer sidebar: stack vertically on mobile so heading is above list */
+  .sidebarWide {
+    width: 100%;
+    flex-direction: column;
+    height: auto;
+    min-height: unset;
+    max-height: none;
+    padding: 10px 16px 8px;
+    justify-content: flex-start;
+    gap: 6px;
+    overflow-y: visible;
+  }
+
+  .sidebarWide .playersRoster {
+    max-height: none;
+    flex-direction: column;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    padding: 0;
+  }
+
+  .sidebarWide .rosterRow {
+    gap: 6px;
+    font-size: 0.75rem;
+  }
+
+  .sidebarWide .rosterSwatch {
+    width: 16px;
+    height: 16px;
+  }
+
+  .sidebarWide .rankBadge {
+    font-size: 0.75rem;
+    padding: 1px 5px;
+  }
   
   .sidebarFooter { 
     display: none; 
@@ -1202,16 +1346,16 @@
   
   .modalContent {
     max-width: 90%;
-    padding: 25px 20px;
+    padding: 22px 18px;
   }
   
   .modalIcon {
-    font-size: 3rem;
-    margin-bottom: 15px;
+    font-size: 2.5rem;
+    margin-bottom: 10px;
   }
   
   .modalTitle {
-    font-size: 1.8rem;
+    font-size: 1.5rem;
   }
   
   .friendSection {
@@ -1246,6 +1390,18 @@
   .sidebar {
     padding: 8px 10px;
     min-height: 60px;
+  }
+
+  .sidebarWide {
+    padding: 8px 12px 6px;
+  }
+
+  .sidebarWide .playersRoster {
+    gap: 4px 10px;
+  }
+
+  .sidebarWide .rosterRow {
+    font-size: 0.7rem;
   }
   
   .avatarBox {
@@ -1319,7 +1475,6 @@
   .statusBanner {
     padding: 8px 12px;
     margin-bottom: 10px;
-    border-radius: 30px;
   }
   
   .statusIcon {
@@ -1425,7 +1580,7 @@
   .friendSectionTitle {
     font-size: 0.85rem;
   }
-  
+
   .friendDivider {
     margin: 12px 0;
   }

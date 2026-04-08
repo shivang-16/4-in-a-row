@@ -17,12 +17,17 @@ export enum CellValue {
 /** Max human (or human+bot) slots for one game; matches CellValue.PLAYER1..PLAYER8 */
 export const MAX_PLAYERS_PER_GAME = 8;
 
-/** Larger boards for 3+ players (still connect-four). Capped so UI stays reasonable. */
+/** Larger boards for 3+ players. Capped so UI stays reasonable. */
 export function boardSizeForPlayerCount(playerCount: number): { rows: number; cols: number } {
   const n = Math.max(2, Math.min(MAX_PLAYERS_PER_GAME, Math.floor(playerCount)));
   const rows = Math.min(14, 6 + Math.ceil((n - 2) * 1.2));
   const cols = Math.min(16, 7 + (n - 2) * 2);
   return { rows, cols };
+}
+
+/** How many in a row needed to win based on player count (3+ players need 6). */
+export function winStreakForPlayerCount(playerCount: number): number {
+  return playerCount >= 3 ? 6 : 4;
 }
 
 export function slotIndexToCellValue(index: number): CellValue {
@@ -51,10 +56,6 @@ export enum WinReason {
   DRAW = 'draw',
   FORFEIT = 'forfeit',
   OPPONENT_DISCONNECT = 'opponent_disconnect',
-  /** 3+ players: board full; one player has the highest 4-in-a-row count */
-  MOST_POINTS = 'most_points',
-  /** 3+ players: board full; top score is tied */
-  SCORE_TIE = 'score_tie',
 }
 
 export type Board = CellValue[][];
@@ -70,6 +71,8 @@ export interface Player {
   isBot: boolean;
   connected: boolean;
   disconnectedAt?: Date;
+  /** Set in multiplayer ranking mode when this player achieves their winning streak */
+  rank?: number;
 }
 
 export interface GameState {
@@ -86,14 +89,17 @@ export interface GameState {
   moves: Move[];
   startedAt: Date;
   endedAt?: Date;
+  /** Number of discs in a row needed to win (4 for 2-player, 6 for 3+ players) */
+  winStreak: number;
+  /**
+   * Multiplayer ranking mode (3+ players): ordered list of players as they achieve their streak.
+   * Game continues until 1 unranked player remains (they get last place).
+   */
+  rankedOut?: { username: string; rank: number }[];
   /** Started from Play with Friends lobby (not random matchmaking) */
   isInviteGame?: boolean;
   /** Stable id for the same group across rematches (invite games only) */
   partyId?: string;
-  /** When true (3+ human players), 4-in-a-rows add points; game ends when board is full */
-  scoringMode?: boolean;
-  /** Points per player index (same order as players); used when scoringMode */
-  scores?: number[];
 }
 
 export interface Move {
@@ -106,14 +112,10 @@ export interface Move {
 export interface MoveResult {
   success: boolean;
   row?: number;
-  /** Set when four-in-a-row is achieved for this disc color */
+  /** Set when N-in-a-row is achieved for this disc color */
   winningPlayer?: CellValue;
   winReason?: WinReason;
   winningCells?: Position[];
   isDraw?: boolean;
   error?: string;
-  /** Scoring mode: how many distinct lines of ≥4 this placement completed */
-  linesScored?: number;
-  /** Scoring mode: board is full — resolve winner by scores */
-  scoringGameOver?: boolean;
 }

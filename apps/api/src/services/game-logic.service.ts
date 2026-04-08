@@ -39,60 +39,28 @@ export class GameLogic {
     return -1;
   }
 
-  static checkWin(board: Board, row: number, col: number): { winReason: WinReason; winningCells: Position[] } | null {
-    const player = board[row][col];
-    if (player === CellValue.EMPTY) return null;
-
-    const horizontalCells = this.getWinningCells(board, row, col, 0, 1, player);
-    if (horizontalCells) {
-      return { winReason: WinReason.HORIZONTAL, winningCells: horizontalCells };
-    }
-
-    const verticalCells = this.getWinningCells(board, row, col, 1, 0, player);
-    if (verticalCells) {
-      return { winReason: WinReason.VERTICAL, winningCells: verticalCells };
-    }
-
-    const diagonal1Cells = this.getWinningCells(board, row, col, -1, 1, player);
-    if (diagonal1Cells) {
-      return { winReason: WinReason.DIAGONAL, winningCells: diagonal1Cells };
-    }
-
-    const diagonal2Cells = this.getWinningCells(board, row, col, 1, 1, player);
-    if (diagonal2Cells) {
-      return { winReason: WinReason.DIAGONAL, winningCells: diagonal2Cells };
-    }
-
-    return null;
-  }
-
-  private static countInDirection(
+  static checkWin(
     board: Board,
     row: number,
     col: number,
-    rowDir: number,
-    colDir: number,
-    player: CellValue,
-    rows: number,
-    cols: number
-  ): number {
-    let count = 0;
-    let r = row + rowDir;
-    let c = col + colDir;
+    winStreak: number = 4
+  ): { winReason: WinReason; winningCells: Position[] } | null {
+    const player = board[row][col];
+    if (player === CellValue.EMPTY) return null;
 
-    while (
-      r >= 0 &&
-      r < rows &&
-      c >= 0 &&
-      c < cols &&
-      board[r][c] === player
-    ) {
-      count++;
-      r += rowDir;
-      c += colDir;
-    }
+    const horizontal = this.getWinningCells(board, row, col, 0, 1, player, winStreak);
+    if (horizontal) return { winReason: WinReason.HORIZONTAL, winningCells: horizontal };
 
-    return count;
+    const vertical = this.getWinningCells(board, row, col, 1, 0, player, winStreak);
+    if (vertical) return { winReason: WinReason.VERTICAL, winningCells: vertical };
+
+    const diag1 = this.getWinningCells(board, row, col, -1, 1, player, winStreak);
+    if (diag1) return { winReason: WinReason.DIAGONAL, winningCells: diag1 };
+
+    const diag2 = this.getWinningCells(board, row, col, 1, 1, player, winStreak);
+    if (diag2) return { winReason: WinReason.DIAGONAL, winningCells: diag2 };
+
+    return null;
   }
 
   private static getWinningCells(
@@ -101,18 +69,15 @@ export class GameLogic {
     col: number,
     rowDir: number,
     colDir: number,
-    player: CellValue
+    player: CellValue,
+    winStreak: number = 4
   ): Position[] | null {
     const { rows, cols } = this.dims(board);
     const cells: Position[] = [{ row, col }];
 
     let r = row + rowDir;
     let c = col + colDir;
-    while (
-      r >= 0 && r < rows &&
-      c >= 0 && c < cols &&
-      board[r][c] === player
-    ) {
+    while (r >= 0 && r < rows && c >= 0 && c < cols && board[r][c] === player) {
       cells.push({ row: r, col: c });
       r += rowDir;
       c += colDir;
@@ -120,77 +85,18 @@ export class GameLogic {
 
     r = row - rowDir;
     c = col - colDir;
-    while (
-      r >= 0 && r < rows &&
-      c >= 0 && c < cols &&
-      board[r][c] === player
-    ) {
+    while (r >= 0 && r < rows && c >= 0 && c < cols && board[r][c] === player) {
       cells.push({ row: r, col: c });
       r -= rowDir;
       c -= colDir;
     }
 
-    if (cells.length >= 4) {
-      console.log(`🏆 Winning cells found: ${cells.length} cells in direction (${rowDir},${colDir})`);
+    if (cells.length >= winStreak) {
+      console.log(`🏆 Winning cells: ${cells.length} in direction (${rowDir},${colDir})`);
       return cells;
     }
 
     return null;
-  }
-
-  /**
-   * How many distinct directions (horizontal / vertical / two diagonals) have a run of ≥4
-   * through the cell just played. Used for 3+ player scoring mode.
-   */
-  static countFourInARowLinesAt(
-    board: Board,
-    row: number,
-    col: number,
-    player: CellValue
-  ): number {
-    const directions: [number, number][] = [
-      [0, 1],
-      [1, 0],
-      [-1, 1],
-      [1, 1],
-    ];
-    let count = 0;
-    for (const [dr, dc] of directions) {
-      const line = this.getWinningCells(board, row, col, dr, dc, player);
-      if (line && line.length >= 4) count++;
-    }
-    return count;
-  }
-
-  /** Multiplayer scoring: no instant win; points per line; ends when board is full. */
-  static makeMoveScoring(
-    board: Board,
-    column: number,
-    player: CellValue
-  ): MoveResult {
-    const { cols } = this.dims(board);
-    if (column < 0 || column >= cols) {
-      return { success: false, error: 'Invalid column' };
-    }
-
-    if (this.isColumnFull(board, column)) {
-      return { success: false, error: 'Column is full' };
-    }
-
-    const row = this.dropDisc(board, column, player);
-    if (row === -1) {
-      return { success: false, error: 'Failed to drop disc' };
-    }
-
-    const linesScored = this.countFourInARowLinesAt(board, row, column, player);
-    const scoringGameOver = this.isBoardFull(board);
-
-    return {
-      success: true,
-      row,
-      linesScored,
-      scoringGameOver,
-    };
   }
 
   static isBoardFull(board: Board): boolean {
@@ -215,7 +121,8 @@ export class GameLogic {
   static makeMove(
     board: Board,
     column: number,
-    player: CellValue
+    player: CellValue,
+    winStreak: number = 4
   ): MoveResult {
     const { cols } = this.dims(board);
     if (column < 0 || column >= cols) {
@@ -231,7 +138,7 @@ export class GameLogic {
       return { success: false, error: 'Failed to drop disc' };
     }
 
-    const winResult = this.checkWin(board, row, column);
+    const winResult = this.checkWin(board, row, column, winStreak);
     if (winResult) {
       return {
         success: true,
@@ -254,7 +161,7 @@ export class GameLogic {
     return { success: true, row };
   }
 
-  /** Pack non-empty cells to the bottom of the column. */
+  /** Pack non-empty cells to the bottom of the column (gravity after player removal). */
   static gravityColumn(board: Board, col: number): void {
     const { rows } = this.dims(board);
     const stack: CellValue[] = [];
