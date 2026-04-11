@@ -321,6 +321,116 @@
   .btnStart { font-size: 0.95rem; }
   .winStreakOptions { gap: 6px; }
   .winStreakBtn { font-size: 0.75rem; padding: 6px 10px; }
+  .colorGrid { grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .colorBall { width: 26px; height: 26px; }
+  .colorName { font-size: 0.55rem; }
+}
+
+/* ── Colour label in player row ── */
+.colorLabel {
+  font-size: 0.7rem;
+  color: #c084fc;
+  background: rgba(160, 68, 255, 0.15);
+  border: 1px solid rgba(160, 68, 255, 0.3);
+  border-radius: 20px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+/* ── Ball colour picker ── */
+.colorPickerSection {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.colorPickerLabel {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #c084fc;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: bold;
+}
+
+.colorGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.colorOption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 4px 6px;
+  border-radius: 12px;
+  border: 2px solid rgba(160, 68, 255, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+  font-family: inherit;
+}
+
+.colorOption:hover:not(:disabled) {
+  border-color: rgba(160, 68, 255, 0.6);
+  background: rgba(160, 68, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.colorOptionSelected {
+  border-color: #a044ff !important;
+  background: rgba(160, 68, 255, 0.22) !important;
+  box-shadow: 0 0 12px rgba(160, 68, 255, 0.45);
+}
+
+.colorOptionTaken {
+  opacity: 0.38;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+.colorBall {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border-width: 3px;
+  border-style: solid;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.45), inset 0 -3px 6px rgba(0,0,0,0.25), inset 2px 2px 4px rgba(255,255,255,0.3);
+  display: block;
+  flex-shrink: 0;
+}
+
+.colorName {
+  font-size: 0.62rem;
+  color: #ccc;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.checkBadge {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 0.6rem;
+  color: #4ade80;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.takenBadge {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 0.6rem;
+  color: #f87171;
+  font-weight: bold;
+  line-height: 1;
 }
 
 /* ── Win streak selector ── */

@@ -16,6 +16,8 @@ export class WebSocketService {
       hostUsername: string;
       maxPlayers: number;
       members: Map<string, Socket>;
+      /** username → colorId they picked (e.g. "yellow", "cyan", …) */
+      colorChoices: Map<string, string>;
     }
   > = new Map();
 
@@ -111,8 +113,9 @@ export class WebSocketService {
         const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
         const members = new Map<string, Socket>();
         members.set(username, socket);
+        const colorChoices = new Map<string, string>();
 
-        this.privateRooms.set(roomCode, { hostUsername: username, maxPlayers, members });
+        this.privateRooms.set(roomCode, { hostUsername: username, maxPlayers, members, colorChoices });
         socket.data.roomCode = roomCode;
         socket.data.waitingRoomCode = roomCode;
         socket.join(`waiting-${roomCode}`);
@@ -124,6 +127,7 @@ export class WebSocketService {
           players: [...members.keys()],
           maxPlayers,
           hostUsername: username,
+          colorChoices: Object.fromEntries(colorChoices),
         });
       });
 
@@ -152,6 +156,8 @@ export class WebSocketService {
             roomCode: normalizedCode,
             players: [...room.members.keys()],
             maxPlayers: room.maxPlayers,
+            hostUsername: room.hostUsername,
+            colorChoices: Object.fromEntries(room.colorChoices),
           });
           return;
         }
@@ -173,6 +179,7 @@ export class WebSocketService {
           players: playerList,
           maxPlayers: room.maxPlayers,
           hostUsername: room.hostUsername,
+          colorChoices: Object.fromEntries(room.colorChoices),
         });
 
         if (playerList.length < room.maxPlayers) {
@@ -181,6 +188,7 @@ export class WebSocketService {
             players: playerList,
             maxPlayers: room.maxPlayers,
             hostUsername: room.hostUsername,
+            colorChoices: Object.fromEntries(room.colorChoices),
           });
           return;
         }
@@ -227,6 +235,7 @@ export class WebSocketService {
           console.log(`🚪 Room ${code} closed by host`);
         } else {
           room.members.delete(username);
+          room.colorChoices.delete(username);
           socket.data.waitingRoomCode = null;
           socket.leave(`waiting-${code}`);
           const playerList = [...room.members.keys()];
@@ -234,6 +243,7 @@ export class WebSocketService {
             players: playerList,
             maxPlayers: room.maxPlayers,
             hostUsername: room.hostUsername,
+            colorChoices: Object.fromEntries(room.colorChoices),
           });
           console.log(`🚪 ${username} left waiting room ${code}`);
         }
@@ -257,6 +267,7 @@ export class WebSocketService {
           socket.emit('room:error', { message: 'Need at least 2 players to start.' });
           return;
         }
+        const colorChoicesSnapshot = Object.fromEntries(room.colorChoices);
         for (const u of playerList) matchmakingService.leaveQueue(u);
         this.privateRooms.delete(code);
         for (const s of room.members.values()) {
@@ -265,8 +276,41 @@ export class WebSocketService {
           s.leave(`waiting-${code}`);
         }
         const participants = playerList.map((u) => ({ username: u, isBot: false }));
-        gameManager.createGame(participants, { isInviteGame: true, winStreak: data?.winStreak });
+        gameManager.createGame(participants, { isInviteGame: true, winStreak: data?.winStreak, colorChoices: colorChoicesSnapshot });
         console.log(`🎮 Host started private game: ${playerList.join(', ')} (winStreak: ${data?.winStreak ?? 'default'})`);
+      });
+
+      // Handle a player picking their ball color in the lobby
+      socket.on('room:colorPick', (data: { colorId: string }) => {
+        const code = (socket.data.roomCode || socket.data.waitingRoomCode) as string | undefined;
+        if (!code) return;
+        const room = this.privateRooms.get(code);
+        if (!room) return;
+        const username = socket.data.username as string;
+        if (!room.members.has(username)) return;
+        const { colorId } = data;
+
+        // Check if another player already holds this color
+        for (const [u, c] of room.colorChoices.entries()) {
+          if (c === colorId && u !== username) {
+            socket.emit('room:error', { message: 'That color is already taken by another player.' });
+            return;
+          }
+        }
+
+        if (colorId) {
+          room.colorChoices.set(username, colorId);
+        } else {
+          room.colorChoices.delete(username);
+        }
+
+        this.io.to(`waiting-${code}`).emit('room:lobbyUpdate', {
+          players: [...room.members.keys()],
+          maxPlayers: room.maxPlayers,
+          hostUsername: room.hostUsername,
+          colorChoices: Object.fromEntries(room.colorChoices),
+        });
+        console.log(`🎨 ${username} picked color "${colorId}" in room ${code}`);
       });
 
       // Handle game moves
@@ -314,10 +358,13 @@ export class WebSocketService {
               console.log(`🚪 Room ${waitingKey} closed due to host disconnect`);
             } else {
               room.members.delete(username);
+              room.colorChoices.delete(username);
               const playerList = [...room.members.keys()];
               this.io.to(`waiting-${waitingKey}`).emit('room:lobbyUpdate', {
                 players: playerList,
                 maxPlayers: room.maxPlayers,
+                hostUsername: room.hostUsername,
+                colorChoices: Object.fromEntries(room.colorChoices),
               });
               console.log(`🚪 ${username} disconnected from waiting room ${waitingKey}`);
             }
@@ -578,7 +625,7 @@ export class WebSocketService {
   }
 
   /** Notifies each human participant and joins them to the Socket.IO game room */
-  public emitGameStart(game: GameState) {
+  public emitGameStart(game: GameState, colorChoices?: Record<string, string>) {
     const gameId = game.id;
     const players = game.players;
     const usernames = players.map((p) => p.username);
@@ -611,6 +658,7 @@ export class WebSocketService {
         partyId: game.partyId,
         winStreak: game.winStreak,
         rankings: game.rankedOut ?? [],
+        colorChoices: colorChoices ?? {},
       });
       console.log(`✅ Sent game:started to ${p.username} (seat ${index + 1}/${players.length})`);
     });

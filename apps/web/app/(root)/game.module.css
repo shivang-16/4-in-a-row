@@ -19,7 +19,7 @@
 
 /* Sidebar Styling */
 .sidebar {
-  width: 180px;
+  width: 220px;
   /* Transparent glass effect */
   background: transparent;
   /* backdrop-filter: blur(10px); */
@@ -69,11 +69,14 @@
 .playerName {
   font-size: 1.2rem;
   color: #fff;
-  text-align: center;
+  text-align: left;
   text-transform: uppercase;
   letter-spacing: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   /* Subtle 3D text effect */
-  text-shadow: 0px 3px 0px #3b1f52, 
+  text-shadow: 0px 3px 0px #3b1f52,
                0px 5px 5px rgba(0,0,0,0.4);
 }
 
@@ -86,22 +89,18 @@
 }
 
 .p1DiscPreview {
-  /* Yellow Striped Disc Style */
-  background: repeating-linear-gradient(
-    45deg,
-    #ffd700,
-    #ffd700 10px,
-    #ffaa00 10px,
-    #ffaa00 20px
-  );
-  border: 2px solid #cc8800;
+  /* Gold stripes */
+  background: repeating-linear-gradient(-45deg, #ffd700, #ffd700 8px, #ffaa00 8px, #ffaa00 16px);
+  border: 2px solid #b8860b;
 }
 
 .p2DiscPreview {
-  /* Cyan Disc Style */
-  background: radial-gradient(circle at 30% 30%, #00ffff, #008b8b);
-  border: 4px solid #00dad7;
-  box-shadow: inset 0 0 5px rgba(0,0,0,0.5);
+  /* Marble swirl */
+  background:
+    radial-gradient(ellipse at 25% 25%, rgba(255,255,255,0.45) 0%, transparent 45%),
+    conic-gradient(from 40deg, #40e0d0, #00ced1, #008b8b, #00bcd4, #40e0d0);
+  border: 2px solid #00dad7;
+  box-sizing: border-box;
 }
 
 .vsBadge {
@@ -341,7 +340,7 @@
   transition: border-color 0.3s;
   text-transform: uppercase;
   letter-spacing: 8px;
-  width: 180px;
+  width: 220px;
 }
 
 .roomCodeInput:focus {
@@ -741,14 +740,16 @@
   transform: translateX(-50%);
 }
 .p1Floating {
-  /* Yellow Striped */
-  background: repeating-linear-gradient(45deg, #ffd700, #ffd700 10px, #ffaa00 10px, #ffaa00 20px);
-  border: 2px solid #cc8800;
+  /* Gold stripes */
+  background: repeating-linear-gradient(-45deg, #ffd700, #ffd700 8px, #ffaa00 8px, #ffaa00 16px);
+  border: 2px solid #b8860b;
 }
 .p2Floating {
-  /* Cyan with Ring */
-  background: radial-gradient(circle at 30% 30%, #00ffff, #008b8b);
-  border: 5px solid #00dad7;
+  /* Marble swirl */
+  background:
+    radial-gradient(ellipse at 25% 25%, rgba(255,255,255,0.45) 0%, transparent 45%),
+    conic-gradient(from 40deg, #40e0d0, #00ced1, #008b8b, #00bcd4, #40e0d0);
+  border: 2px solid #00dad7;
 }
 
 @keyframes float {
@@ -828,7 +829,7 @@
 }
 
 .player1 {
-  /* Yellow Striped Texture */
+  /* Gold diagonal stripes */
   background: repeating-linear-gradient(
     -45deg,
     #ffd700,
@@ -836,75 +837,148 @@
     #ffaa00 8px,
     #ffaa00 16px
   );
-  border: 1px solid #cc8800;
+  border: 1px solid #b8860b;
 }
 
 .player2 {
-  /* Cyan with Ring */
-  background: radial-gradient(circle at 30% 30%, #40e0d0, #008b8b);
-  border: 6px solid #00dad7; /* The ring */
+  /* Marble swirl */
+  background:
+    radial-gradient(ellipse at 25% 25%, rgba(255,255,255,0.45) 0%, transparent 45%),
+    conic-gradient(from 40deg, #40e0d0, #00ced1, #008b8b, #00bcd4, #40e0d0);
+  border: 3px solid #00dad7;
   box-sizing: border-box;
 }
 
 .player3 {
-  background: linear-gradient(145deg, #ff6b6b, #c92a2a);
-  border: 3px solid #ff8787;
+  /* Lava conic */
+  background:
+    radial-gradient(circle at 38% 32%, rgba(255,210,0,0.55) 0%, transparent 38%),
+    conic-gradient(from 0deg, #ff6b6b, #ff0000, #c92a2a, #ff4500, #ff8c00, #ff6b6b);
+  border: 3px solid #ff4444;
   box-sizing: border-box;
 }
 
 .player4 {
-  background: linear-gradient(145deg, #a855f7, #6b21a8);
-  border: 3px solid #d8b4fe;
+  /* Galaxy nebula */
+  background:
+    radial-gradient(circle at 28% 28%, rgba(255,255,255,0.28) 0%, transparent 28%),
+    radial-gradient(circle at 72% 65%, rgba(200,80,255,0.35) 0%, transparent 40%),
+    radial-gradient(circle at 55% 50%, #a855f7, #4c1d95);
+  border: 3px solid #c084fc;
   box-sizing: border-box;
 }
 
 .player5 {
-  background: linear-gradient(145deg, #22c55e, #14532d);
-  border: 3px solid #86efac;
+  /* Forest diagonal stripes */
+  background: repeating-linear-gradient(
+    120deg,
+    #22c55e,
+    #22c55e 6px,
+    #16a34a 6px,
+    #16a34a 12px,
+    #166534 12px,
+    #166534 18px
+  );
+  border: 3px solid #4ade80;
   box-sizing: border-box;
 }
 
 .player6 {
-  background: linear-gradient(145deg, #f97316, #9a3412);
-  border: 3px solid #fdba74;
+  /* Citrus segments */
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.22) 0%, transparent 22%),
+    conic-gradient(
+      from 0deg,
+      #f97316 0deg, #ea580c 30deg, #f97316 60deg, #ea580c 90deg,
+      #f97316 120deg, #ea580c 150deg, #f97316 180deg, #ea580c 210deg,
+      #f97316 240deg, #ea580c 270deg, #f97316 300deg, #ea580c 330deg,
+      #f97316 360deg
+    );
+  border: 3px solid #fb923c;
   box-sizing: border-box;
 }
 
 .player7 {
-  background: linear-gradient(145deg, #ec4899, #9d174d);
-  border: 3px solid #f9a8d4;
+  /* Candy cross-hatch */
+  background:
+    repeating-linear-gradient(45deg, transparent, transparent 7px, rgba(249,168,212,0.55) 7px, rgba(249,168,212,0.55) 8px),
+    repeating-linear-gradient(-45deg, transparent, transparent 7px, rgba(249,168,212,0.55) 7px, rgba(249,168,212,0.55) 8px),
+    linear-gradient(145deg, #ec4899, #9d174d);
+  border: 3px solid #f472b6;
   box-sizing: border-box;
 }
 
 .player8 {
-  background: linear-gradient(145deg, #e5e7eb, #4b5563);
-  border: 3px solid #f3f4f6;
+  /* Chrome metallic bands */
+  background: repeating-linear-gradient(
+    -12deg,
+    #6b7280,
+    #d1d5db 3px,
+    #f3f4f6 6px,
+    #9ca3af 10px,
+    #6b7280 13px
+  );
+  border: 3px solid #e5e7eb;
   box-sizing: border-box;
 }
 
 .p3Floating {
-  background: linear-gradient(145deg, #ff6b6b, #c92a2a);
-  border: 2px solid #ff8787;
+  /* Lava conic */
+  background:
+    radial-gradient(circle at 38% 32%, rgba(255,210,0,0.55) 0%, transparent 38%),
+    conic-gradient(from 0deg, #ff6b6b, #ff0000, #c92a2a, #ff4500, #ff8c00, #ff6b6b);
+  border: 2px solid #ff4444;
 }
 .p4Floating {
-  background: linear-gradient(145deg, #a855f7, #6b21a8);
-  border: 2px solid #d8b4fe;
+  /* Galaxy nebula */
+  background:
+    radial-gradient(circle at 28% 28%, rgba(255,255,255,0.28) 0%, transparent 28%),
+    radial-gradient(circle at 72% 65%, rgba(200,80,255,0.35) 0%, transparent 40%),
+    radial-gradient(circle at 55% 50%, #a855f7, #4c1d95);
+  border: 2px solid #c084fc;
 }
 .p5Floating {
-  background: linear-gradient(145deg, #22c55e, #14532d);
-  border: 2px solid #86efac;
+  /* Forest stripes */
+  background: repeating-linear-gradient(
+    120deg,
+    #22c55e, #22c55e 6px,
+    #16a34a 6px, #16a34a 12px,
+    #166534 12px, #166534 18px
+  );
+  border: 2px solid #4ade80;
 }
 .p6Floating {
-  background: linear-gradient(145deg, #f97316, #9a3412);
-  border: 2px solid #fdba74;
+  /* Citrus segments */
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255,255,255,0.22) 0%, transparent 22%),
+    conic-gradient(
+      from 0deg,
+      #f97316 0deg, #ea580c 30deg, #f97316 60deg, #ea580c 90deg,
+      #f97316 120deg, #ea580c 150deg, #f97316 180deg, #ea580c 210deg,
+      #f97316 240deg, #ea580c 270deg, #f97316 300deg, #ea580c 330deg,
+      #f97316 360deg
+    );
+  border: 2px solid #fb923c;
 }
 .p7Floating {
-  background: linear-gradient(145deg, #ec4899, #9d174d);
-  border: 2px solid #f9a8d4;
+  /* Candy cross-hatch */
+  background:
+    repeating-linear-gradient(45deg, transparent, transparent 7px, rgba(249,168,212,0.55) 7px, rgba(249,168,212,0.55) 8px),
+    repeating-linear-gradient(-45deg, transparent, transparent 7px, rgba(249,168,212,0.55) 7px, rgba(249,168,212,0.55) 8px),
+    linear-gradient(145deg, #ec4899, #9d174d);
+  border: 2px solid #f472b6;
 }
 .p8Floating {
-  background: linear-gradient(145deg, #e5e7eb, #4b5563);
-  border: 2px solid #9ca3af;
+  /* Chrome bands */
+  background: repeating-linear-gradient(
+    -12deg,
+    #6b7280,
+    #d1d5db 3px,
+    #f3f4f6 6px,
+    #9ca3af 10px,
+    #6b7280 13px
+  );
+  border: 2px solid #e5e7eb;
 }
 
 /* Dynamic board: cell size set via --cell-size / --board-gap on .boardWrapper */
@@ -969,13 +1043,11 @@
 }
 
 .rosterRowSpeaking {
-  border-color: #22c55e;
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+  /* border reserved for future use */
 }
 
 .rosterRowMuted {
-  border-color: #f87171;
-  box-shadow: 0 0 6px rgba(248, 113, 113, 0.4);
+  /* border reserved for future use */
 }
 
 .rosterRankedOut {
@@ -1143,7 +1215,7 @@
 /* Tablets (up to 1024px) */
 @media (max-width: 1024px) {
   .sidebar {
-    width: 150px;
+    width: 190px;
     padding: 8px 0;
   }
   
@@ -1284,10 +1356,9 @@
   
   .playerName {
     font-size: 0.85rem;
-    max-width: 120px;
-    overflow-wrap: break-word;
-    word-break: break-word;
-    white-space: normal;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   
   .mainArea {
@@ -1466,10 +1537,9 @@
   
   .playerName {
     font-size: 0.7rem;
-    max-width: 90px;
-    overflow-wrap: break-word;
-    word-break: break-word;
-    white-space: normal;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   
   .playerProfile {
@@ -1700,26 +1770,24 @@
 
 .chatToggle {
   position: absolute;
-  left: -70px;
+  left: -78px;
   top: 20px;
-  width: 65px;
-  height: 40px;
-  /* Purple theme matching site */
+  width: 74px;
+  height: 48px;
   background: linear-gradient(180deg, #a044ff 0%, #6a3093 100%);
   border: 2px solid #4a2c7a;
-  border-radius: 12px 0 0 12px;
   border-right: none;
+  border-radius: 14px 0 0 14px;
   color: white;
-  font-size: 0.85rem;
-  font-family: inherit; /* Uses Lilita One */
+  font-size: 1rem;
+  font-family: inherit;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: all 0.1s;
   box-shadow: -4px 4px 0px #3b1f52,
-              -4px 8px 10px rgba(0,0,0,0.3);
+              -4px 8px 12px rgba(0,0,0,0.35);
   display: flex;
   align-items: center;
   justify-content: center;
-  text-shadow: 0 2px 0 rgba(0,0,0,0.3);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -1750,37 +1818,48 @@
 
 .chatToggle:hover {
   filter: brightness(1.1);
-  left: -75px;
+  left: -80px;
   box-shadow: -6px 6px 0px #3b1f52,
-              -6px 12px 15px rgba(0,0,0,0.3);
+              -6px 12px 16px rgba(0,0,0,0.35);
 }
 
-/* Standalone call tab — anchored above the chat toggle (bright teal so it reads vs purple chat) */
+.chatToggle:active {
+  left: -74px;
+  box-shadow: -1px 1px 0px #3b1f52;
+}
+
+/* Standalone call tab — anchored below the chat toggle */
 .callTabBtn {
   position: absolute;
-  left: -70px;
-  top: 72px; /* chat toggle is at top: 20px, height 40px → 20+40+12 gap = 72 */
-  width: 65px;
-  height: 40px;
-  background: linear-gradient(180deg, #2dd4bf 0%, #14b8a6 45%, #0d9488 100%);
-  border: 2px solid #0f766e;
-  border-radius: 12px 0 0 12px;
+  left: -78px;
+  top: 80px;
+  width: 74px;
+  height: 48px;
+  background: linear-gradient(180deg, #a044ff 0%, #6a3093 100%);
+  border: 2px solid #4a2c7a;
   border-right: none;
+  border-radius: 14px 0 0 14px;
   color: white;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: -4px 4px 0px #115e59,
-              -4px 8px 10px rgba(0,0,0,0.3);
+  transition: all 0.1s;
+  box-shadow: -4px 4px 0px #3b1f52,
+              -4px 8px 12px rgba(0,0,0,0.35);
   display: flex;
   align-items: center;
   justify-content: center;
-  filter: saturate(1.05);
 }
 
 .callTabBtn:hover {
-  filter: brightness(1.15);
-  left: -75px;
+  filter: brightness(1.1);
+  left: -80px;
+  box-shadow: -6px 6px 0px #3b1f52,
+              -6px 12px 16px rgba(0,0,0,0.35);
+}
+
+.callTabBtn:active {
+  left: -74px;
+  box-shadow: -1px 1px 0px #3b1f52;
 }
 
 .callTabBtn:disabled {
@@ -1872,28 +1951,29 @@
 /* ── Floating call bar ───────────────────────────────────────────────────── */
 .callFloatingBar {
   position: fixed;
-  /* Sit just below the very top edge */
   top: 14px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 300;
   display: flex;
   align-items: center;
-  gap: 10px;
-  background: rgba(18, 10, 35, 0.93);
-  border: 1.5px solid rgba(160, 68, 255, 0.5);
+  gap: 12px;
+  background: linear-gradient(180deg, #2d1b4e 0%, #1a0b2e 100%);
+  border: 2px solid #4a2c7a;
   border-radius: 40px;
-  padding: 8px 16px 8px 12px;
-  backdrop-filter: blur(12px);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(160, 68, 255, 0.15);
+  padding: 8px 12px 8px 14px;
+  box-shadow: 0 6px 0px #3b1f52,
+              0 10px 24px rgba(0,0,0,0.5);
   animation: callBarIn 0.25s ease-out both;
   min-width: 200px;
-  max-width: min(420px, calc(100vw - 160px)); /* never overlap chat or sidebar */
+  max-width: min(440px, calc(100vw - 160px));
 }
 
 .callFloatingBar.callFloatingBarActive {
-  border-color: rgba(80, 220, 100, 0.6);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45), 0 0 14px rgba(80, 220, 100, 0.2);
+  border-color: #a044ff;
+  box-shadow: 0 6px 0px #3b1f52,
+              0 10px 24px rgba(0,0,0,0.5),
+              0 0 18px rgba(160, 68, 255, 0.3);
 }
 
 @keyframes callBarIn {
@@ -1907,8 +1987,9 @@
 }
 
 .callFloatingIcon {
-  font-size: 1.3rem;
+  font-size: 1.1rem;
   flex-shrink: 0;
+  color: #c084fc;
 }
 
 .callFloatingInfo {
@@ -1917,19 +1998,22 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .callFloatingLabel {
-  font-size: 0.78rem;
-  color: #d0bfff;
+  font-size: 0.75rem;
+  color: #c084fc;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   flex-wrap: wrap;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-family: inherit;
 }
 
 .callFloatingLabel strong {
@@ -1937,75 +2021,91 @@
 }
 
 .callFloatingTimer {
-  font-size: 0.72rem;
-  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.4);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
-  margin-top: 1px;
+  letter-spacing: 0.05em;
 }
 
 .callFloatingMember {
-  background: rgba(80, 220, 100, 0.15);
-  border: 1px solid rgba(80, 220, 100, 0.3);
+  background: linear-gradient(180deg, #a044ff22 0%, #6a309322 100%);
+  border: 1px solid #4a2c7a;
   border-radius: 20px;
-  padding: 1px 7px;
-  font-size: 0.72rem;
-  color: #a5f3b0;
+  padding: 2px 9px;
+  font-size: 0.7rem;
+  color: #d8b4fe;
   white-space: nowrap;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
 .callFloatingActions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .callFloatBtn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: linear-gradient(180deg, #a044ff 0%, #6a3093 100%);
+  border: 2px solid #4a2c7a;
   border-radius: 20px;
   color: #fff;
   cursor: pointer;
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 5px 13px;
-  transition: background 0.15s, transform 0.1s;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 5px 14px;
+  transition: all 0.1s;
   white-space: nowrap;
+  box-shadow: 0 3px 0px #3b1f52;
 }
 
 .callFloatBtn:hover {
-  background: rgba(255, 255, 255, 0.22);
-  transform: scale(1.05);
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 0px #3b1f52;
+}
+
+.callFloatBtn:active {
+  transform: translateY(3px);
+  box-shadow: 0 0px 0px #3b1f52;
 }
 
 .callFloatBtnJoin {
-  background: rgba(80, 220, 100, 0.2);
-  border-color: rgba(80, 220, 100, 0.45);
-  color: #a5f3b0;
+  background: linear-gradient(180deg, #22c55e 0%, #15803d 100%);
+  border-color: #166534;
+  box-shadow: 0 3px 0px #14532d;
 }
 
 .callFloatBtnJoin:hover {
-  background: rgba(80, 220, 100, 0.35);
+  filter: brightness(1.12);
+  box-shadow: 0 5px 0px #14532d;
 }
 
 .callMemberCount {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(160, 68, 255, 0.25);
+  border: 1px solid #4a2c7a;
   border-radius: 20px;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   font-weight: 700;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  margin-left: 6px;
+  margin-left: 4px;
   line-height: 1;
+  color: #d8b4fe;
 }
 
 .callFloatBtnMuted {
-  background: rgba(220, 80, 80, 0.2);
-  border-color: rgba(220, 80, 80, 0.4);
+  background: linear-gradient(180deg, #ef4444 0%, #b91c1c 100%);
+  border-color: #991b1b;
+  box-shadow: 0 3px 0px #7f1d1d;
 }
 
 .callFloatBtnLeave {
@@ -2126,34 +2226,36 @@
   
   /* On mobile: CHAT left, CALL right (above panel) */
   .chatToggle {
-    left: calc(50% - 46px - 65px);
-    top: -50px;
+    left: calc(50% - 4px - 64px);
+    top: -44px;
     transform: translateX(-50%);
-    border-radius: 8px 8px 0 0;
-    width: 80px;
-    height: 45px;
+    border-radius: 10px 10px 0 0;
+    width: 64px;
+    height: 40px;
+    font-size: 1rem;
   }
   
   .chatToggle:hover {
     transform: translateX(-50%) scale(1.05);
-    left: calc(50% - 46px - 65px);
+    left: calc(50% - 4px - 64px);
   }
 
   .callTabBtn {
     position: absolute;
-    left: calc(50% + 46px);
-    top: -50px;
+    left: calc(50% + 4px);
+    top: -44px;
     transform: translateX(-50%);
-    width: 65px;
-    height: 45px;
-    border-radius: 8px 8px 0 0;
-    border-right: 2px solid #0f766e;
+    width: 64px;
+    height: 40px;
+    border-radius: 10px 10px 0 0;
+    border-right: none;
     border-bottom: none;
-    box-shadow: 0 -4px 0px #115e59, 0 -8px 10px rgba(0,0,0,0.3);
+    font-size: 1rem;
+    box-shadow: 0 -4px 0px #164e63, 0 -8px 14px rgba(0,0,0,0.4);
   }
 
   .callTabBtn:hover {
-    left: calc(50% + 46px);
+    left: calc(50% + 4px);
     filter: brightness(1.15);
   }
 

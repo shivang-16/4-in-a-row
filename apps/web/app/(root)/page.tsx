@@ -4,6 +4,13 @@ import { useEffect, useState, useRef, useMemo, useCallback, type CSSProperties }
 import { useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import styles from './game.module.css';
+import { BALL_COLORS } from '../room/[code]/page';
+import {
+  Volume2, VolumeX, Mic, MicOff, Phone, PhoneOff,
+  Users, Trophy, Medal, Home as HomeIcon, Rocket, Hourglass,
+  Bomb, ArrowRight, ArrowDown, ArrowUpRight,
+  MessageSquare, Clock,
+} from 'lucide-react';
 
 const DEFAULT_ROWS = 6;
 const DEFAULT_COLS = 7;
@@ -153,6 +160,8 @@ export default function Home() {
   const [rematchNeeded, setRematchNeeded] = useState(0);
   const [hasVotedRematch, setHasVotedRematch] = useState(false);
   const [rematchError, setRematchError] = useState('');
+  /** username → colorId chosen in the lobby (invite games only); empty = use default slot colours */
+  const [playerColorChoices, setPlayerColorChoices] = useState<Record<string, string>>({});
   
   // UI feedback states
   const [usernameShake, setUsernameShake] = useState(false);
@@ -333,6 +342,7 @@ export default function Home() {
       if (data.winStreak != null) setWinStreak(data.winStreak);
       if (data.rankings) setRankings(data.rankings);
       if (data.partyId) setInvitePartyId(data.partyId);
+      if (data.isInviteGame != null) setGameMode(data.isInviteGame ? 'friend' : 'pvp');
     });
 
     newSocket.on(
@@ -652,6 +662,7 @@ export default function Home() {
         isInviteGame?: boolean;
         partyId?: string;
         winStreak?: number;
+        colorChoices?: Record<string, string>;
       };
       const u = data.username;
       if (!u) return;
@@ -668,6 +679,9 @@ export default function Home() {
       setGameStatus('playing');
       setGameMode(data.isInviteGame ? 'friend' : 'pvp');
       if (data.partyId) setInvitePartyId(data.partyId);
+      if (data.colorChoices && Object.keys(data.colorChoices).length > 0) {
+        setPlayerColorChoices(data.colorChoices);
+      }
       setMoveCount(0);
       // Store so the socket useEffect can pick it up once the socket is ready
       sessionStorage.setItem('4inarow_reconnectGame', JSON.stringify({ gameId: data.gameId, username: u }));
@@ -1112,12 +1126,29 @@ export default function Home() {
     return '';
   };
 
+  /** Returns an inline style override when the player picked a custom color in the lobby. */
+  const getDiscColorStyle = useCallback((playerNumber: number): CSSProperties | undefined => {
+    if (!playerColorChoices || Object.keys(playerColorChoices).length === 0) return undefined;
+    const playerName = playerUsernames[playerNumber - 1];
+    if (!playerName) return undefined;
+    const colorId = playerColorChoices[playerName];
+    if (!colorId) return undefined;
+    const ballColor = BALL_COLORS.find((c) => c.id === colorId);
+    if (!ballColor) return undefined;
+    return { background: ballColor.bg, borderColor: ballColor.border, borderWidth: 3, borderStyle: 'solid', boxSizing: 'border-box' };
+  }, [playerColorChoices, playerUsernames]);
+
   const getFloatingClass = () => {
     if (myPlayerNumber !== null && myPlayerNumber >= 1 && myPlayerNumber <= 8) {
       return floatingClasses[myPlayerNumber - 1];
     }
     return styles.p1Floating;
   };
+
+  const getFloatingColorStyle = useCallback((): CSSProperties | undefined => {
+    if (myPlayerNumber === null) return undefined;
+    return getDiscColorStyle(myPlayerNumber);
+  }, [myPlayerNumber, getDiscColorStyle]);
 
   const turnPlayerName =
     playerUsernames.length > 0 && currentTurn >= 1 && currentTurn <= playerUsernames.length
@@ -1212,9 +1243,9 @@ export default function Home() {
   const getWinReasonText = () => {
     if (isDraw) return 'Board Full - Draw!';
     switch (winReason) {
-      case 'horizontal': return '→ Horizontal Win!';
-      case 'vertical': return '↓ Vertical Win!';
-      case 'diagonal': return '↗ Diagonal Win!';
+      case 'horizontal': return <><ArrowRight size={14} style={{verticalAlign:'middle',marginRight:4}}/>Horizontal Win!</>;
+      case 'vertical': return <><ArrowDown size={14} style={{verticalAlign:'middle',marginRight:4}}/>Vertical Win!</>;
+      case 'diagonal': return <><ArrowUpRight size={14} style={{verticalAlign:'middle',marginRight:4}}/>Diagonal Win!</>;
       case 'forfeit': return 'Opponent Forfeited';
       case 'opponent_disconnect': return 'Opponent Disconnected';
       default: return '';
@@ -1241,11 +1272,11 @@ export default function Home() {
             <div className={styles.playersRoster}>
               {playerUsernames.map((name, i) => {
                 const playerRank = rankings.find((r) => r.username === name)?.rank;
-                const rankEmoji = playerRank === 1 ? '🥇' : playerRank === 2 ? '🥈' : playerRank === 3 ? '🥉' : playerRank ? `#${playerRank}` : null;
+                const rankEmoji = playerRank === 1 ? <Medal size={14} color="#ffd700" /> : playerRank === 2 ? <Medal size={14} color="#c0c0c0" /> : playerRank === 3 ? <Medal size={14} color="#cd7f32" /> : playerRank ? `#${playerRank}` : null;
                 const isRankedOut = playerRank != null;
                 return (
                   <div key={`${name}-${i}`} className={`${styles.rosterRow} ${isRankedOut ? styles.rosterRankedOut : ''} ${speakingUsers.has(name) ? styles.rosterRowSpeaking : mutedUsers.has(name) ? styles.rosterRowMuted : ''}`}>
-                    <span className={`${styles.rosterSwatch} ${discClasses[i] ?? ''}`} />
+                    <span className={`${styles.rosterSwatch} ${discClasses[i] ?? ''}`} style={getDiscColorStyle(i + 1)} />
                     <span
                       className={`${styles.playerName} ${
                         currentTurn === i + 1 && !isRankedOut ? styles.rosterCurrent : ''
@@ -1255,37 +1286,32 @@ export default function Home() {
                       {name === username ? ' (you)' : ''}
                     </span>
                     {rankEmoji && <span className={styles.rankBadge}>{rankEmoji}</span>}
-                    {speakingUsers.has(name) && <span className={styles.speakingIcon}>🔊</span>}
-                    {mutedUsers.has(name) && !speakingUsers.has(name) && <span className={styles.mutedIcon}>🔇</span>}
+                    {speakingUsers.has(name) && <span className={styles.speakingIcon}><Volume2 size={13} /></span>}
+                    {mutedUsers.has(name) && !speakingUsers.has(name) && <span className={styles.mutedIcon}><MicOff size={13} /></span>}
                   </div>
                 );
               })}
             </div>
           </>
         ) : (
-          <>
-            <div className={styles.playerProfile}>
-              <div className={`${styles.avatarBox} ${speakingUsers.has(opponent ?? '') ? styles.avatarBoxSpeaking : ''} ${mutedUsers.has(opponent ?? '') ? styles.avatarBoxMuted : ''}`}>
-                <span className={styles.avatar}>💡</span>
-              </div>
-              <span className={styles.playerName}>{opponent || 'Waiting...'}</span>
-              {speakingUsers.has(opponent ?? '') && <span className={styles.speakingIcon}>🔊</span>}
-              {mutedUsers.has(opponent ?? '') && !speakingUsers.has(opponent ?? '') && <span className={styles.mutedIcon}>🔇</span>}
-              <div className={`${styles.miniDisc} ${styles.p2DiscPreview}`}></div>
+          <div className={styles.playersRoster}>
+            <div className={`${styles.rosterRow} ${speakingUsers.has(opponent ?? '') ? styles.rosterRowSpeaking : mutedUsers.has(opponent ?? '') ? styles.rosterRowMuted : ''}`}>
+              <span className={`${styles.rosterSwatch} ${styles.p2DiscPreview}`} style={getDiscColorStyle(2)} />
+              <span className={`${styles.playerName} ${currentTurn === 2 ? styles.rosterCurrent : ''}`}>
+                {opponent || 'Waiting...'}
+              </span>
+              {speakingUsers.has(opponent ?? '') && <span className={styles.speakingIcon}><Volume2 size={13} /></span>}
+              {mutedUsers.has(opponent ?? '') && !speakingUsers.has(opponent ?? '') && <span className={styles.mutedIcon}><MicOff size={13} /></span>}
             </div>
-            <div className={styles.vsBadge}>
-              <span className={styles.vsText}>VS</span>
+            <div className={`${styles.rosterRow} ${speakingUsers.has(username) ? styles.rosterRowSpeaking : mutedUsers.has(username) ? styles.rosterRowMuted : ''}`}>
+              <span className={`${styles.rosterSwatch} ${styles.p1DiscPreview}`} style={getDiscColorStyle(1)} />
+              <span className={`${styles.playerName} ${currentTurn === 1 ? styles.rosterCurrent : ''}`}>
+                {username || 'Player'} (You)
+              </span>
+              {speakingUsers.has(username) && <span className={styles.speakingIcon}><Volume2 size={13} /></span>}
+              {mutedUsers.has(username) && !speakingUsers.has(username) && <span className={styles.mutedIcon}><MicOff size={13} /></span>}
             </div>
-            <div className={styles.playerProfile}>
-              <div className={`${styles.miniDisc} ${styles.p1DiscPreview}`}></div>
-              <span className={styles.playerName}>(You) {username || 'Player'}</span>
-              {speakingUsers.has(username) && <span className={styles.speakingIcon}>🔊</span>}
-              {mutedUsers.has(username) && !speakingUsers.has(username) && <span className={styles.mutedIcon}>🔇</span>}
-              <div className={`${styles.avatarBox} ${speakingUsers.has(username) ? styles.avatarBoxSpeaking : ''} ${mutedUsers.has(username) ? styles.avatarBoxMuted : ''}`}>
-                <span className={styles.avatar}>😎</span>
-              </div>
-            </div>
-          </>
+          </div>
         )}
 
         <div className={styles.sidebarFooter}>
@@ -1294,7 +1320,7 @@ export default function Home() {
             onClick={() => setBgMusicEnabled(!bgMusicEnabled)}
             title={bgMusicEnabled ? 'Mute Music' : 'Play Music'}
           >
-             {bgMusicEnabled ? '🔊 Sound On' : '🔇 Sound Off'}
+             {bgMusicEnabled ? <><Volume2 size={14} style={{verticalAlign:'middle',marginRight:5}}/>Sound On</> : <><VolumeX size={14} style={{verticalAlign:'middle',marginRight:5}}/>Sound Off</>}
           </button>
         </div>
       </div>
@@ -1315,7 +1341,7 @@ export default function Home() {
               <button onClick={handleJoinPvP} className={styles.button}>Find Player</button>
               <button onClick={handleJoinBot} className={`${styles.button} ${styles.buttonSecondary}`}>Play Bot</button>
             </div>
-            <button onClick={handlePlayWithFriend} className={`${styles.button} ${styles.buttonFriend}`}>👥 Play with Friend</button>
+            <button onClick={handlePlayWithFriend} className={`${styles.button} ${styles.buttonFriend}`}><Users size={15} style={{verticalAlign:'middle',marginRight:6}}/>Play with Friend</button>
            </div>
         ) : (
           <>
@@ -1325,7 +1351,7 @@ export default function Home() {
             {gameStatus === 'waiting' && (
                <div className={styles.modalOverlay}>
                  <div className={styles.modalContent}>
-                    <div className={styles.modalIcon}>⏳</div>
+                    <div className={styles.modalIcon}><Clock size={40} /></div>
                     <h2 className={styles.modalTitle}>Joining...</h2>
                     <p className={styles.modalSubtitle}>Looking for {gameMode === 'bot' ? 'a bot opponent' : 'another player'}</p>
                  </div>
@@ -1356,6 +1382,7 @@ export default function Home() {
                            ? discClasses[currentTurn - 1]
                            : styles.p1DiscPreview
                        }`}
+                       style={getDiscColorStyle(currentTurn)}
                        aria-hidden
                      />
                    )}
@@ -1366,7 +1393,7 @@ export default function Home() {
                {rankFlash && (
                  <div className={styles.rankFlashBanner}>
                    <span className={styles.rankFlashEmoji}>
-                     {rankFlash.rank === 1 ? '🥇' : rankFlash.rank === 2 ? '🥈' : rankFlash.rank === 3 ? '🥉' : `#${rankFlash.rank}`}
+                     {rankFlash.rank === 1 ? <Medal size={18} color="#ffd700" /> : rankFlash.rank === 2 ? <Medal size={18} color="#c0c0c0" /> : rankFlash.rank === 3 ? <Medal size={18} color="#cd7f32" /> : `#${rankFlash.rank}`}
                    </span>
                    <span className={styles.rankFlashText}>
                      {rankFlash.username === username ? 'You' : rankFlash.username} ranked #{rankFlash.rank}!
@@ -1377,7 +1404,7 @@ export default function Home() {
                {gameStatus === 'ended' && (
                  <div className={styles.statusBanner}>
                    <div className={styles.statusTop}>
-                     <span className={styles.statusIcon}>🏆</span>
+                     <span className={styles.statusIcon}><Trophy size={22} /></span>
                      <span className={styles.statusText}>{endGameHeadline()}</span>
                      <span className={styles.statusSubtext}>{getWinReasonText()}</span>
                    </div>
@@ -1440,6 +1467,7 @@ export default function Home() {
                          style={{
                            left: pointerPreview.x,
                            top: pointerPreview.y,
+                           ...getFloatingColorStyle(),
                          }}
                        />
                      )}
@@ -1466,6 +1494,7 @@ export default function Home() {
                                {cell !== 0 && (
                                  <div
                                    className={`${styles.disc} ${getCellClass(cell)} ${isWinningCell ? styles.winningDisc : ''}`}
+                                   style={getDiscColorStyle(cell)}
                                  />
                                )}
                              </div>
@@ -1484,7 +1513,7 @@ export default function Home() {
       {/* ── Floating Call Bar — visible above game whenever a call is active ─── */}
       {callRoomActive && gameStatus === 'playing' && (
         <div className={`${styles.callFloatingBar} ${amInCall ? styles.callFloatingBarActive : ''}`}>
-          <span className={styles.callFloatingIcon}>{amInCall ? '🎙️' : '📞'}</span>
+          <span className={styles.callFloatingIcon}>{amInCall ? <Mic size={18} /> : <Phone size={18} />}</span>
           <div className={styles.callFloatingInfo}>
             {amInCall ? (
               <span className={styles.callFloatingLabel}>
@@ -1519,7 +1548,7 @@ export default function Home() {
                   onClick={handleToggleMute}
                   title={isMuted ? 'Unmute' : 'Mute'}
                 >
-                  {isMuted ? '🔇' : '🎙️'}
+                  {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
                 </button>
                 <button
                   className={`${styles.callFloatBtn} ${styles.callFloatBtnLeave}`}
@@ -1534,10 +1563,11 @@ export default function Home() {
         </div>
       )}
 
-      {/* Chat Panel */}
+      {/* Chat Panel — only for real-player games (not bot, not idle) */}
+      {(gameMode === 'friend' || gameMode === 'pvp') && (
       <div className={`${styles.chatPanel} ${chatOpen ? styles.chatOpen : ''}`}>
         {/* Standalone call tab — sits above the chat tab on the right side */}
-        {gameStatus === 'playing' && gameMode !== 'bot' && gameMode !== null && (
+        {gameStatus === 'playing' && (
           <button
             className={`${styles.callTabBtn} ${callRoomActive ? styles.callTabBtnDisabled : ''}`}
             onClick={callRoomActive ? undefined : handleStartCall}
@@ -1545,7 +1575,7 @@ export default function Home() {
             title={callRoomActive ? 'Call already in progress' : 'Start voice call'}
           >
             <span className={styles.callTabBtnInner}>
-              {'📞'}
+              {<Phone size={18} />}
               {callRoomActive && <span className={styles.callTabBtnCross}>✕</span>}
             </span>
           </button>
@@ -1557,7 +1587,7 @@ export default function Home() {
           }
           setChatOpen(!chatOpen);
         }}>
-          {chatOpen ? 'close' : 'chat'}
+          <MessageSquare size={20} />
           {!chatOpen && unreadCount > 0 && (
             <span className={styles.unreadBadge}>{unreadCount > 9 ? '9+' : unreadCount}</span>
           )}
@@ -1569,19 +1599,13 @@ export default function Home() {
               <span>Chat</span>
             </div>
             <div className={styles.chatMessages}>
-              {gameMode === 'bot' ? (
-                <div className={styles.chatMessage} style={{ textAlign: 'center', opacity: 0.7, marginTop: '50%' }}>
-                  💬 Chat is available when playing with real players!
+              {chatMessages.map((msg, idx) => (
+                <div key={idx} className={styles.chatMessage}>
+                  <strong>{msg.username}:</strong> {msg.message}
                 </div>
-              ) : (
-                chatMessages.map((msg, idx) => (
-                  <div key={idx} className={styles.chatMessage}>
-                    <strong>{msg.username}:</strong> {msg.message}
-                  </div>
-                ))
-              )}
+              ))}
             </div>
-            {gameStatus === 'playing' && gameMode !== 'bot' && gameMode !== null && (
+            {gameStatus === 'playing' && (
               <div className={styles.chatInput}>
                 <input
                   type="text"
@@ -1596,13 +1620,14 @@ export default function Home() {
           </>
         )}
       </div>
+      )}
 
       {/* Spectate Confirmation Modal */}
       {showSpectateModal && (
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent}>
              <button className={styles.closeButton} onClick={() => setShowSpectateModal(false)}>×</button>
-             <div className={styles.modalIcon}>💣</div>
+             <div className={styles.modalIcon}><Bomb size={40} /></div>
              <p className={styles.modalText}>Do you wish to leave the game and become a spectator?</p>
              <div className={styles.modalActions}>
                 <button className={`${styles.modalButton} ${styles.confirmBtn}`} onClick={() => {
@@ -1622,7 +1647,7 @@ export default function Home() {
         <div className={styles.modalOverlay}>
           <div className={styles.modalContent}>
             <button className={styles.closeButton} onClick={handleCloseFriendModal}>×</button>
-            <div className={styles.modalIcon}>👥</div>
+            <div className={styles.modalIcon}><Users size={40} /></div>
             <h2 className={styles.modalTitle}>Play with Friends</h2>
             
             <div className={styles.friendSection}>
@@ -1631,7 +1656,7 @@ export default function Home() {
                   You&apos;ll be taken to a lobby. Share the link with friends — no player limit to set.
                 </p>
                 <button className={`${styles.button} ${styles.buttonFriend}`} onClick={handleCreateRoom}>
-                  🏠 Create Room
+                  <HomeIcon size={15} style={{verticalAlign:'middle',marginRight:6}}/>Create Room
                 </button>
               </div>
 
@@ -1645,7 +1670,7 @@ export default function Home() {
                   type="text"
                   value={friendRoomCode}
                   onChange={(e) => setFriendRoomCode(e.target.value.toUpperCase())}
-                  placeholder="Enter Room Code"
+                  placeholder="Code"
                   className={styles.roomCodeInput}
                   maxLength={6}
                 />
@@ -1654,7 +1679,7 @@ export default function Home() {
                   onClick={handleJoinRoom}
                   disabled={!friendRoomCode.trim()}
                 >
-                  🚀 Join Room
+                  <Rocket size={15} style={{verticalAlign:'middle',marginRight:6}}/>Join Room
                 </button>
               </div>
 

@@ -32,7 +32,7 @@ export class GameManager {
    */
   createGame(
     participants: GameParticipantInput[],
-    options?: { isInviteGame?: boolean; partyId?: string; winStreak?: number }
+    options?: { isInviteGame?: boolean; partyId?: string; winStreak?: number; colorChoices?: Record<string, string> }
   ): GameState {
     if (participants.length < 2) {
       throw new Error('At least 2 players required');
@@ -85,7 +85,7 @@ export class GameManager {
     console.log(`🎮 Game created: ${gameId} - ${names} (${winStreak}-in-a-row)`);
 
     if (wsService) {
-      wsService.emitGameStart(gameState);
+      wsService.emitGameStart(gameState, options?.colorChoices);
     }
 
     kafkaService.sendGameEvent(GameEventType.GAME_STARTED, {
