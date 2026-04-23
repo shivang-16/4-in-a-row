@@ -31,7 +31,7 @@ const DIRECTIONS: [number, number][] = [
   [-1, -1], // ↖  up-left
 ];
 
-const ALPHABET = 'ABCDEFGHIJKLMNOPRSTUVWXYZ';
+const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 // ── Difficulty → word count mapping ──────────────────────────────────────────
 export const DIFFICULTY_WORD_COUNTS = {

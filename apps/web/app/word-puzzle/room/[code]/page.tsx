@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import {
-  User, XCircle, Clock, Copy, Check, Crown,
+  XCircle, Clock, Copy, Check, Crown,
   Play, Users,
 } from 'lucide-react';
 import styles from './wp-room.module.css';
@@ -32,17 +32,15 @@ export const WP_PLAYER_COLORS = [
   { id: 7, label: 'Orange', hex: '#fb923c' },
 ];
 
-type Status = 'prompt' | 'loading' | 'lobby' | 'starting' | 'closed';
+type Status = 'loading' | 'lobby' | 'starting' | 'closed';
 
 export default function WPRoomPage() {
   const { code: rawCode } = useParams<{ code: string }>();
   const router = useRouter();
 
   const isCreateMode = rawCode === 'new';
-  const [status, setStatus]           = useState<Status>('prompt');
+  const [status, setStatus]           = useState<Status>('loading');
   const [socket, setSocket]           = useState<Socket | null>(null);
-  const [usernameInput, setUsernameInput] = useState('');
-  const [nameError, setNameError]     = useState('');
   const [username, setUsername]       = useState('');
   const [roomCode, setRoomCode]       = useState('');
   const [players, setPlayers]         = useState<string[]>([]);
@@ -59,22 +57,18 @@ export default function WPRoomPage() {
 
   const isHost = username === hostUsername;
 
-  // Pre-fill name from sessionStorage, but always show prompt screen
+  // Read name from sessionStorage and connect immediately
   useEffect(() => {
     const saved = sessionStorage.getItem('4inarow_username') ?? '';
-    setUsernameInput(saved);
-  }, []);
+    if (!saved) {
+      // No name saved — send back to word puzzle home to enter name first
+      router.replace('/word-puzzle');
+      return;
+    }
+    setUsername(saved);
+  }, [router]);
 
-  const confirmUsername = () => {
-    const u = usernameInput.trim();
-    if (!u) { setNameError('Enter a username first'); return; }
-    sessionStorage.setItem('4inarow_username', u);
-    setUsername(u);
-    setNameError('');
-    setStatus('loading');
-  };
-
-  // ── Connect once username is confirmed ──────────────────────────────────
+  // ── Connect once username is set ────────────────────────────────────────
   useEffect(() => {
     if (!username) return;
 
@@ -161,34 +155,6 @@ export default function WPRoomPage() {
     setWordCount(def.wordCount);
     socket?.emit('wp:room:setWordCount', { wordCount: def.wordCount });
   }, [socket]);
-
-  // ── Render: name prompt ─────────────────────────────────────────────────
-  if (status === 'prompt') {
-    return (
-      <div className={styles.page}>
-        <div className={styles.promptCard}>
-          <div className={styles.promptIcon}><User size={40} /></div>
-          <h2 className={styles.promptTitle}>Enter your name</h2>
-          <p className={styles.promptSub}>
-            {isCreateMode ? 'Creating a new room…' : <>Joining room <strong>{rawCode.toUpperCase()}</strong></>}
-          </p>
-          <input
-            className={styles.promptInput}
-            value={usernameInput}
-            onChange={(e) => setUsernameInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && confirmUsername()}
-            placeholder="Your username"
-            maxLength={20}
-            autoFocus
-          />
-          {nameError && <p className={styles.errorText}>{nameError}</p>}
-          <button className={styles.btnPrimary} onClick={confirmUsername}>
-            {isCreateMode ? 'Create Room →' : 'Join Room →'}
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   // ── Render: loading ─────────────────────────────────────────────────
   if (status === 'loading') {

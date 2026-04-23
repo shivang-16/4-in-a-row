@@ -7,53 +7,80 @@ const GAMES = [
   {
     href: '/4-in-a-row',
     title: '4 in a Row',
-    emoji: '🔴',
-    description: 'Drop discs and connect four — or challenge up to 8 players in a single match.',
-    tags: ['Multiplayer', 'Strategy', 'VS Bot'],
-    color: '#a044ff',
-    glow: 'rgba(160, 68, 255, 0.35)',
+    icon: '🔴',
+    accent: '#ff6b6b',
+    glow: 'rgba(255,107,107,0.3)',
+    gradient: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
+    description: 'Drop discs, outsmart your rival. Connect four to win — challenge friends or battle a smart bot.',
+    tags: ['2-8 Players', 'Strategy', 'VS Bot'],
+    players: '1-8',
   },
   {
     href: '/word-puzzle',
-    title: 'Word Puzzle',
-    emoji: '📝',
-    description: 'Race to unscramble hidden words before the clock runs out. Beat your best score!',
-    tags: ['Solo', 'Word', 'Timed'],
-    color: '#00d4aa',
-    glow: 'rgba(0, 212, 170, 0.35)',
+    title: 'Word Search',
+    icon: '📝',
+    accent: '#c8972a',
+    glow: 'rgba(200,151,42,0.3)',
+    gradient: 'linear-gradient(135deg, #c8972a 0%, #8a6018 100%)',
+    description: 'Race to find hidden words on the board. Longer words earn more points — beat friends or go solo.',
+    tags: ['1-8 Players', 'Words', 'Competitive'],
+    players: '1-8',
   },
 ];
 
 export default function HubPage() {
   return (
     <div className={styles.page}>
-      <header className={styles.header}>
-        <div className={styles.logo}>🎮</div>
-        <h1 className={styles.title}>Game Hub</h1>
-        <p className={styles.subtitle}>Pick a game and start playing</p>
+      {/* Hero */}
+      <header className={styles.hero}>
+        <div className={styles.logoWrap}>
+          <span className={styles.logoDice}>🎲</span>
+          <span className={styles.logoController}>🎮</span>
+          <span className={styles.logoPuzzle}>🧩</span>
+        </div>
+        <h1 className={styles.title}>Play Arena</h1>
+        <p className={styles.tagline}>Pick a game. Challenge your friends. Have fun.</p>
       </header>
 
+      {/* Game cards */}
       <main className={styles.grid}>
-        {GAMES.map((game) => (
+        {GAMES.map((g) => (
           <Link
-            key={game.href}
-            href={game.href}
+            key={g.href}
+            href={g.href}
             className={styles.card}
-            style={{ '--card-color': game.color, '--card-glow': game.glow } as React.CSSProperties}
+            style={{
+              '--accent': g.accent,
+              '--glow': g.glow,
+              '--grad': g.gradient,
+            } as React.CSSProperties}
           >
-            <div className={styles.cardGlow} />
-            <div className={styles.cardEmoji}>{game.emoji}</div>
-            <h2 className={styles.cardTitle}>{game.title}</h2>
-            <p className={styles.cardDesc}>{game.description}</p>
-            <div className={styles.cardTags}>
-              {game.tags.map((tag) => (
-                <span key={tag} className={styles.tag}>{tag}</span>
-              ))}
+            <div className={styles.cardShine} />
+            <div className={styles.cardInner}>
+              <div className={styles.cardHeader}>
+                <span className={styles.cardIcon}>{g.icon}</span>
+                <div className={styles.cardPlayerBadge}>{g.players} Players</div>
+              </div>
+              <h2 className={styles.cardTitle}>{g.title}</h2>
+              <p className={styles.cardDesc}>{g.description}</p>
+              <div className={styles.cardTags}>
+                {g.tags.map((t) => (
+                  <span key={t} className={styles.tag}>{t}</span>
+                ))}
+              </div>
+              <div className={styles.cardBtn}>
+                <span>Play Now</span>
+                <span className={styles.cardArrow}>→</span>
+              </div>
             </div>
-            <div className={styles.cardCta}>Play now →</div>
           </Link>
         ))}
       </main>
+
+      {/* Footer */}
+      <footer className={styles.footer}>
+        <span className={styles.footerText}>Made with <span className={styles.heart}>&#10084;</span> by Shivang</span>
+      </footer>
     </div>
   );
 }

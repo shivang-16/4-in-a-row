@@ -502,11 +502,9 @@ export class WebSocketService {
       // Handle chat messages
       socket.on('chat:send', (data: { gameId: string; username: string; message: string }) => {
         const { gameId, message } = data;
-        // Broadcast message to all players in the game room
-        this.io.to(gameId).emit('chat:message', {
-          username: data.username,
-          message,
-        });
+        const payload = { username: data.username, message };
+        // Broadcast to plain room (4-in-a-row) and wp-game- prefixed room (word puzzle)
+        this.io.to(gameId).to(`wp-game-${gameId}`).emit('chat:message', payload);
         console.log(`💬 Chat message from ${data.username} in game ${gameId}: ${message}`);
       });
 
@@ -518,7 +516,7 @@ export class WebSocketService {
         if (!username || !gameId) return;
         if (!this.callRooms.has(gameId)) this.callRooms.set(gameId, new Set());
         this.callRooms.get(gameId)!.add(username);
-        socket.to(gameId).emit('call:ringing', { from: username, gameId });
+        socket.to(gameId).to(`wp-game-${gameId}`).emit('call:ringing', { from: username, gameId });
         console.log(`📞 Call started by ${username} in game ${gameId}`);
       });
 
@@ -544,7 +542,7 @@ export class WebSocketService {
       // Player rejects call
       socket.on('call:reject', (data: { gameId: string }) => {
         const username = socket.data.username as string;
-        socket.to(data.gameId).emit('call:rejected', { username });
+        socket.to(data.gameId).to(`wp-game-${data.gameId}`).emit('call:rejected', { username });
       });
 
       // Relay WebRTC offer to target peer
@@ -574,13 +572,13 @@ export class WebSocketService {
         const { gameId } = data;
         this.callRooms.get(gameId)?.delete(username);
         if (this.callRooms.get(gameId)?.size === 0) this.callRooms.delete(gameId);
-        socket.to(gameId).emit('call:peer_left', { username, gameId });
+        socket.to(gameId).to(`wp-game-${gameId}`).emit('call:peer_left', { username, gameId });
         console.log(`📞 ${username} left call in game ${gameId}`);
       });
 
       socket.on('call:mute', (data: { gameId: string; muted: boolean }) => {
         const username = socket.data.username as string;
-        socket.to(data.gameId).emit('call:mute', { username, muted: data.muted });
+        socket.to(data.gameId).to(`wp-game-${data.gameId}`).emit('call:mute', { username, muted: data.muted });
       });
 
       // ── Word Puzzle events (wp: prefix) ────────────────────────────────────

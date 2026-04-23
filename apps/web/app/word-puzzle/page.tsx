@@ -146,7 +146,7 @@ export default function WordPuzzlePage() {
 
     // Word claimed by any player
     sock.on('wp:game:wordClaimed', (data: {
-      wordId: string; claimedBy: string; colorIndex: number; cells: WPCell[];
+      wordId: string; word: string; claimedBy: string; colorIndex: number; cells: WPCell[];
       players: WPPlayer[];
     }) => {
       setWords((prev) => prev.map((w) =>
@@ -155,8 +155,7 @@ export default function WordPuzzlePage() {
       setPlayers(data.players);
 
       if (data.claimedBy === uname) {
-        const word = words.find((w) => w.id === data.wordId);
-        setLastClaim({ word: word?.word ?? '?', correct: true });
+        setLastClaim({ word: data.word ?? '?', correct: true });
         setTimeout(() => setLastClaim(null), 1500);
       }
     });
@@ -167,7 +166,8 @@ export default function WordPuzzlePage() {
     });
 
     // Game ended
-    sock.on('wp:game:ended', (data: { players: WPPlayer[]; winner: string | null }) => {
+    sock.on('wp:game:ended', (data: { players: WPPlayer[]; winner: string | null; words?: WPWord[] }) => {
+      if (data.words) setWords(data.words);
       setPlayers(data.players);
       setEndResult(data.players);
       setPhase('ended');
@@ -266,10 +266,10 @@ export default function WordPuzzlePage() {
 
   function initGame(data: any, uname: string, solo = false) {
     setGameId(data.gameId);
-    setBoard(data.board);
-    setGridSize(data.gridSize);
-    setWords(data.words);
-    setPlayers(data.players);
+    setBoard(data.board ?? []);
+    setGridSize(data.gridSize ?? 15);
+    setWords(data.words ?? []);
+    setPlayers(data.players ?? []);
     const seat = data.players.findIndex((p: WPPlayer) => p.username === uname);
     setMyColorIndex(seat >= 0 ? seat % 8 : (data.yourColorIndex ?? 0));
     setPhase('playing');
@@ -519,6 +519,8 @@ export default function WordPuzzlePage() {
 
   // Use a ref so pointer handlers always see current selStart without stale closure
   const selStartRef = useRef<WPCell | null>(null);
+  // Mirror selEnd into a ref so onBoardPointerUp always reads the latest end cell
+  const selEndRef   = useRef<WPCell | null>(null);
 
   /** Read the cell coordinates from the element under the pointer */
   function cellFromPoint(clientX: number, clientY: number): WPCell | null {
@@ -538,6 +540,7 @@ export default function WordPuzzlePage() {
     // Capture on the board so pointermove keeps firing even when moving fast
     e.currentTarget.setPointerCapture(e.pointerId);
     selStartRef.current = cell;
+    selEndRef.current   = cell;
     setSelStart(cell);
     setSelEnd(cell);
   }
@@ -546,26 +549,31 @@ export default function WordPuzzlePage() {
   function onBoardPointerMove(e: PointerEvent<HTMLDivElement>) {
     if (e.buttons === 0 || !selStartRef.current) return;
     const cell = cellFromPoint(e.clientX, e.clientY);
-    if (cell) setSelEnd(cell);
+    if (cell) {
+      selEndRef.current = cell;
+      setSelEnd(cell);
+    }
   }
 
   /** Submit selection on pointer up */
   const onBoardPointerUp = useCallback((e?: PointerEvent<HTMLDivElement>) => {
     const start = selStartRef.current;
+    const end   = selEndRef.current;
     selStartRef.current = null;
-    if (!start || !selEnd || !gameId || !socket) { setSelStart(null); setSelEnd(null); return; }
-    if (start.row === selEnd.row && start.col === selEnd.col) {
+    selEndRef.current   = null;
+    if (!start || !end || !gameId || !socket) { setSelStart(null); setSelEnd(null); return; }
+    if (start.row === end.row && start.col === end.col) {
       setSelStart(null); setSelEnd(null); return;
     }
     socket.emit('wp:game:claim', {
       gameId,
       startRow: start.row, startCol: start.col,
-      endRow: selEnd.row,  endCol: selEnd.col,
+      endRow: end.row,     endCol: end.col,
     });
     setSelStart(null);
     setSelEnd(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selEnd, gameId, socket]);
+  }, [gameId, socket]);
 
   // ── Cell visual state ───────────────────────────────────────────────────
   function getCellStyle(row: number, col: number): { className: string; style: CSSProperties } {
@@ -592,38 +600,6 @@ export default function WordPuzzlePage() {
 
   // ── Render ──────────────────────────────────────────────────────────────
 
-  /* ─── NAME PROMPT (shown whenever name is not locked yet) ─── */
-  if (!nameLocked) {
-    return (
-      <div className={styles.page}>
-        <div className={styles.menuCard}>
-          <div className={styles.menuEmoji}>📝</div>
-          <h1 className={styles.menuTitle}>Word Search</h1>
-          <p className={styles.menuDesc}>Enter your name to get started</p>
-          <div className={styles.nameRow}>
-            <input
-              type="text"
-              placeholder="Your username"
-              value={nameInput}
-              onChange={(e) => setNameInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSetUsername(nameInput)}
-              className={styles.nameInput}
-              maxLength={20}
-              autoFocus
-            />
-            <button
-              className={styles.primaryBtn}
-              onClick={() => handleSetUsername(nameInput)}
-              disabled={!nameInput.trim()}
-            >
-              Let's Play →
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   /* ─── MENU ─── */
   if (phase === 'menu') {
     return (
@@ -636,24 +612,53 @@ export default function WordPuzzlePage() {
             Longer words = more points!
           </p>
 
-          <p className={styles.helloText}>Playing as <strong>{username}</strong></p>
+          {/* Inline name field */}
+          <div className={styles.nameRow}>
+            <input
+              type="text"
+              placeholder="Your username"
+              value={nameInput}
+              onChange={(e) => {
+                setNameInput(e.target.value);
+                setNameLocked(false);
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && handleSetUsername(nameInput)}
+              className={styles.nameInput}
+              maxLength={20}
+            />
+          </div>
 
           <div className={styles.modeGrid}>
-            <button className={styles.modeCard} onClick={handleFindPlayer}>
+            <button className={styles.modeCard} onClick={() => {
+              const u = nameInput.trim(); if (!u) return;
+              handleSetUsername(u);
+              const sock = connectSocket(u);
+              setPhase('matchmaking'); setMmStatus('Looking for players…');
+              const wc = DIFFICULTIES.find((d) => d.id === menuDifficulty)?.wordCount ?? 14;
+              sock.emit('wp:matchmaking:join', { username: u, wordCount: wc });
+            }} disabled={!nameInput.trim()}>
               <Users size={22} className={styles.modeIcon} />
               <span className={styles.modeLabel}>Find Player</span>
               <span className={styles.modeHint}>Quick online match</span>
             </button>
 
-            <button className={styles.modeCard} onClick={handleCreateRoom}>
+            <button className={styles.modeCard} onClick={() => {
+              const u = nameInput.trim(); if (!u) return;
+              handleSetUsername(u);
+              sessionStorage.setItem('4inarow_username', u);
+              router.push('/word-puzzle/room/new');
+            }} disabled={!nameInput.trim()}>
               <HomeIcon size={22} className={styles.modeIcon} />
-              <span className={styles.modeLabel}>Create Room</span>
+              <span className={styles.modeLabel}>Play with Friends</span>
               <span className={styles.modeHint}>Up to 8 friends</span>
             </button>
           </div>
 
           {/* Solo play card — full width, distinct colour */}
-          <button className={styles.soloCard} onClick={() => setPhase('solo-setup')}>
+          <button className={styles.soloCard} onClick={() => {
+            const u = nameInput.trim(); if (!u) return;
+            handleSetUsername(u); setPhase('solo-setup');
+          }} disabled={!nameInput.trim()}>
             <span className={styles.soloCardEmoji}>🧩</span>
             <span className={styles.soloCardLabel}>Solo Play</span>
             <span className={styles.soloCardHint}>Beat the clock, no opponents</span>
@@ -688,8 +693,13 @@ export default function WordPuzzlePage() {
             />
             <button
               className={styles.secondaryBtn}
-              onClick={handleJoinRoom}
-              disabled={!friendRoomCode.trim()}
+              onClick={() => {
+                const u = nameInput.trim(); if (!u) return;
+                handleSetUsername(u);
+                sessionStorage.setItem('4inarow_username', u);
+                router.push(`/word-puzzle/room/${friendRoomCode.trim().toUpperCase()}`);
+              }}
+              disabled={!friendRoomCode.trim() || !nameInput.trim()}
             >
               <Rocket size={14} />Join Room
             </button>
