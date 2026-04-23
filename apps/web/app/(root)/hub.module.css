@@ -1,0 +1,182 @@
+/* ── Hub Page ── */
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background:
+    linear-gradient(rgba(8, 4, 18, 0.72), rgba(8, 4, 18, 0.72)),
+    url('/image1.jpg') center / cover no-repeat fixed;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 48px;
+  padding: 48px 20px;
+  font-family: var(--font-geist-sans, sans-serif);
+  color: #fff;
+  cursor: url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 2L12 28L16 16L28 12L2 2Z' fill='%23a044ff' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 2 2, crosshair;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.logo {
+  font-size: 3.5rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 20px rgba(160, 68, 255, 0.7));
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-8px); }
+}
+
+.title {
+  font-family: var(--font-lilita, 'Courier New', monospace);
+  font-size: clamp(2.2rem, 6vw, 3.5rem);
+  font-weight: 400;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #fff 20%, #c084fc 60%, #a044ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+/* ── Game Grid ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 360px));
+  gap: 28px;
+  width: 100%;
+  max-width: 800px;
+  justify-content: center;
+}
+
+/* ── Game Card ── */
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 32px 28px 24px;
+  border-radius: 20px;
+  background: rgba(20, 10, 35, 0.75);
+  border: 1.5px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  overflow: hidden;
+  text-decoration: none;
+  color: #fff;
+  transition: transform 0.22s cubic-bezier(.34,1.56,.64,1),
+              border-color 0.22s ease,
+              box-shadow 0.22s ease;
+  cursor: inherit;
+}
+
+.card:hover {
+  transform: translateY(-6px) scale(1.01);
+  border-color: var(--card-color);
+  box-shadow: 0 12px 40px var(--card-glow), 0 0 0 1px var(--card-color);
+}
+
+.cardGlow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse at top left, var(--card-glow), transparent 65%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.card:hover .cardGlow {
+  opacity: 1;
+}
+
+.cardEmoji {
+  font-size: 2.8rem;
+  line-height: 1;
+}
+
+.cardTitle {
+  font-family: var(--font-lilita, 'Courier New', monospace);
+  font-size: 1.5rem;
+  font-weight: 400;
+  letter-spacing: 1px;
+  margin: 0;
+  color: var(--card-color);
+}
+
+.cardDesc {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.65);
+  margin: 0;
+}
+
+.cardTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.cardCta {
+  margin-top: auto;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--card-color);
+  letter-spacing: 0.3px;
+  opacity: 0.85;
+  transition: opacity 0.15s ease, letter-spacing 0.15s ease;
+}
+
+.card:hover .cardCta {
+  opacity: 1;
+  letter-spacing: 1px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 480px) {
+  .page {
+    padding: 36px 16px;
+    gap: 36px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+
+  .card {
+    padding: 26px 22px 20px;
+  }
+}

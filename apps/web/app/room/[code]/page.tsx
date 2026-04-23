@@ -173,7 +173,7 @@ export default function RoomPage() {
     sock.on('game:started', (data: any) => {
       sessionStorage.setItem('4inarow_pendingGame', JSON.stringify({ ...data, username }));
       setStatus('starting');
-      router.push('/');
+      router.push('/4-in-a-row');
     });
 
     return () => { sock.close(); };
@@ -201,7 +201,7 @@ export default function RoomPage() {
 
   const handleLeave = () => {
     socket?.emit('room:leave');
-    router.push('/');
+    router.push('/4-in-a-row');
   };
 
   /** Returns the ball color data for a given username (fallback: first slot-based default not taken by another player) */
@@ -265,7 +265,7 @@ export default function RoomPage() {
           <div className={styles.promptIcon}><XCircle size={40} /></div>
           <h2 className={styles.promptTitle}>Room unavailable</h2>
           <p className={styles.promptSub}>{roomError}</p>
-          <button className={styles.btnPrimary} onClick={() => router.push('/')}>
+          <button className={styles.btnPrimary} onClick={() => router.push('/4-in-a-row')}>
             Back to home
           </button>
         </div>

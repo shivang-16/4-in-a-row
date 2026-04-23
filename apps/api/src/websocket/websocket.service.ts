@@ -5,6 +5,8 @@ import { GameEventType } from '../types/events';
 import { matchmakingService } from '../services/matchmaking.service';
 import { gameManager } from '../services/game-manager.service';
 import { Position, MAX_PLAYERS_PER_GAME, GameState } from '../types/game';
+import { wordPuzzleService, gridSizeForWordCount } from '../services/word-puzzle.service';
+import { WPRoom, generateRoomCode } from '../types/word-puzzle';
 
 export class WebSocketService {
   private io: SocketIOServer;
@@ -30,6 +32,12 @@ export class WebSocketService {
   private rematchWinStreak: Map<string, number> = new Map();
   /** Voice call: tracks who is in the call for each game room */
   private callRooms: Map<string, Set<string>> = new Map(); // gameId → Set<username>
+
+  // ── Word Puzzle lobby & matchmaking ───────────────────────────────────────
+  private wpRooms: Map<string, WPRoom> = new Map();
+  /** Simple FIFO matchmaking queue for word puzzle */
+  private wpQueue: { username: string; socket: Socket; wordCount: number }[] = [];
+  private wpQueueTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(httpServer: HTTPServer) {
     // Define allowed origins
@@ -342,6 +350,10 @@ export class WebSocketService {
         if (username) {
           this.connectedPlayers.delete(username);
           matchmakingService.leaveQueue(username);
+          // Remove from WP matchmaking queue
+          this.wpQueue = this.wpQueue.filter((e) => e.username !== username);
+          // Clean up any WP waiting room
+          this.handleWPRoomLeave(socket);
 
           const waitingKey = (socket.data.waitingRoomCode || socket.data.roomCode) as string | undefined;
           if (waitingKey && this.privateRooms.has(waitingKey)) {
@@ -570,6 +582,240 @@ export class WebSocketService {
         const username = socket.data.username as string;
         socket.to(data.gameId).emit('call:mute', { username, muted: data.muted });
       });
+
+      // ── Word Puzzle events (wp: prefix) ────────────────────────────────────
+
+      // Matchmaking: join queue
+      socket.on('wp:matchmaking:join', (data: { username: string; wordCount?: number }) => {
+        const { username } = data;
+        const wordCount = data.wordCount ?? 14; // default: medium
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+
+        // Remove from queue if already in
+        this.wpQueue = this.wpQueue.filter((e) => e.username !== username);
+        this.wpQueue.push({ username, socket, wordCount });
+        socket.emit('wp:matchmaking:queued', { position: this.wpQueue.length });
+        console.log(`🔤 WP matchmaking: ${username} joined queue (size=${this.wpQueue.length}, words=${wordCount})`);
+
+        if (this.wpQueue.length >= 2) {
+          const pair = this.wpQueue.splice(0, 2);
+          // Use the average word count of the two matched players (rounded to nearest defined level)
+          const avgWc = Math.round(((pair[0]?.wordCount ?? 14) + (pair[1]?.wordCount ?? 14)) / 2);
+          this.startWPGame(pair.map((e) => ({ username: e.username, socket: e.socket })), avgWc);
+        }
+      });
+
+      // Solo play: start an instant single-player game
+      socket.on('wp:solo:start', (data: { username: string; wordCount?: number }) => {
+        const { username } = data;
+        const wordCount = data.wordCount ?? 14;
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+        console.log(`🔤 WP solo game starting for ${username} (words=${wordCount})`);
+        this.startWPGame([{ username, socket }], wordCount);
+      });
+
+      // Matchmaking: leave queue
+      socket.on('wp:matchmaking:leave', () => {
+        const username = socket.data.username as string;
+        if (username) {
+          this.wpQueue = this.wpQueue.filter((e) => e.username !== username);
+        }
+      });
+
+      // Room: create
+      socket.on('wp:room:create', (data: { username: string }) => {
+        const { username } = data;
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+
+        // Remove from WP queue if present
+        this.wpQueue = this.wpQueue.filter((e) => e.username !== username);
+
+        const code = generateRoomCode();
+        const members = new Map<string, Socket>();
+        members.set(username, socket);
+        const room: WPRoom = { code, hostUsername: username, members, wordCount: 10 };
+        this.wpRooms.set(code, room);
+        socket.data.wpRoomCode = code;
+        socket.join(`wp-waiting-${code}`);
+
+        socket.emit('wp:room:created', { roomCode: code, hostUsername: username });
+        this.io.to(`wp-waiting-${code}`).emit('wp:room:lobbyUpdate', {
+          players: [username],
+          hostUsername: username,
+          wordCount: room.wordCount,
+          maxPlayers: MAX_PLAYERS_PER_GAME,
+        });
+        console.log(`🔤 WP room created: ${code} by ${username}`);
+      });
+
+      // Room: join
+      socket.on('wp:room:join', (data: { username: string; roomCode: string }) => {
+        const { username, roomCode } = data;
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+        const code = roomCode.toUpperCase().trim();
+        const room = this.wpRooms.get(code);
+
+        if (!room) {
+          socket.emit('wp:room:error', { message: 'Room not found. Check the code and try again.' });
+          return;
+        }
+        if (room.members.size >= MAX_PLAYERS_PER_GAME) {
+          socket.emit('wp:room:error', { message: 'This room is full (max 8 players).' });
+          return;
+        }
+        if (room.members.has(username)) {
+          room.members.set(username, socket);
+          socket.data.wpRoomCode = code;
+          socket.join(`wp-waiting-${code}`);
+          socket.emit('wp:room:joinPending', {
+            roomCode: code,
+            players: [...room.members.keys()],
+            hostUsername: room.hostUsername,
+            wordCount: room.wordCount,
+            maxPlayers: MAX_PLAYERS_PER_GAME,
+          });
+          return;
+        }
+
+        this.wpQueue = this.wpQueue.filter((e) => e.username !== username);
+        room.members.set(username, socket);
+        socket.data.wpRoomCode = code;
+        socket.join(`wp-waiting-${code}`);
+
+        const playerList = [...room.members.keys()];
+        this.io.to(`wp-waiting-${code}`).emit('wp:room:lobbyUpdate', {
+          players: playerList,
+          hostUsername: room.hostUsername,
+          wordCount: room.wordCount,
+          maxPlayers: MAX_PLAYERS_PER_GAME,
+        });
+        socket.emit('wp:room:joinPending', {
+          roomCode: code,
+          players: playerList,
+          hostUsername: room.hostUsername,
+          wordCount: room.wordCount,
+          maxPlayers: MAX_PLAYERS_PER_GAME,
+        });
+        console.log(`🔤 ${username} joined WP room ${code}`);
+      });
+
+      // Room: leave
+      socket.on('wp:room:leave', () => {
+        this.handleWPRoomLeave(socket);
+      });
+
+      // Host sets word count
+      socket.on('wp:room:setWordCount', (data: { wordCount: number }) => {
+        const code = socket.data.wpRoomCode as string | undefined;
+        if (!code) return;
+        const room = this.wpRooms.get(code);
+        if (!room || room.hostUsername !== socket.data.username) return;
+        room.wordCount = Math.max(10, Math.min(20, data.wordCount));
+        this.io.to(`wp-waiting-${code}`).emit('wp:room:lobbyUpdate', {
+          players: [...room.members.keys()],
+          hostUsername: room.hostUsername,
+          wordCount: room.wordCount,
+          maxPlayers: MAX_PLAYERS_PER_GAME,
+        });
+        console.log(`🔤 WP room ${code}: word count set to ${room.wordCount}`);
+      });
+
+      // Host starts game
+      socket.on('wp:room:start', () => {
+        const code = socket.data.wpRoomCode as string | undefined;
+        if (!code) return;
+        const room = this.wpRooms.get(code);
+        if (!room) return;
+        if (room.hostUsername !== socket.data.username) {
+          socket.emit('wp:room:error', { message: 'Only the host can start the game.' });
+          return;
+        }
+        if (room.members.size < 2) {
+          socket.emit('wp:room:error', { message: 'Need at least 2 players to start.' });
+          return;
+        }
+
+        const playerList = [...room.members.keys()];
+        const sockets = [...room.members.values()];
+
+        // Clean up room
+        this.wpRooms.delete(code);
+        for (const s of sockets) {
+          s.data.wpRoomCode = null;
+          s.leave(`wp-waiting-${code}`);
+        }
+
+        this.startWPGame(
+          playerList.map((u) => ({ username: u, socket: room.members.get(u)! })),
+          room.wordCount
+        );
+        console.log(`🔤 WP room ${code} game started: ${playerList.join(', ')}`);
+      });
+
+      // Player claims a word
+      socket.on('wp:game:claim', (data: { gameId: string; startRow: number; startCol: number; endRow: number; endCol: number }) => {
+        const username = socket.data.username as string;
+        const { gameId, startRow, startCol, endRow, endCol } = data;
+        if (!username || !gameId) return;
+
+        const result = wordPuzzleService.claimWord(gameId, username, startRow, startCol, endRow, endCol);
+        if (!result) {
+          socket.emit('wp:game:claimFailed', { message: 'Invalid selection or word already claimed.' });
+          return;
+        }
+
+        const { word, player } = result;
+        const game = wordPuzzleService.getGame(gameId)!;
+
+        // Broadcast the claim to all players in the game room
+        this.io.to(`wp-game-${gameId}`).emit('wp:game:wordClaimed', {
+          wordId: word.id,
+          word: word.word,
+          cells: word.cells,
+          claimedBy: username,
+          colorIndex: player.colorIndex,
+          score: player.score,
+          players: game.players.map((p) => ({ username: p.username, score: p.score, colorIndex: p.colorIndex })),
+        });
+
+        // If game ended, emit game over
+        if (game.status === 'ended') {
+          const sorted = [...game.players].sort((a, b) => b.score - a.score);
+          this.io.to(`wp-game-${gameId}`).emit('wp:game:ended', {
+            players: sorted.map((p) => ({ username: p.username, score: p.score, colorIndex: p.colorIndex })),
+            winner: sorted[0]?.username ?? null,
+            words: game.words,
+          });
+          setTimeout(() => wordPuzzleService.deleteGame(gameId), 60000);
+          console.log(`🏁 WP game ${gameId} ended. Winner: ${sorted[0]?.username}`);
+        }
+      });
+
+      // Reconnect to a word puzzle game
+      socket.on('wp:game:reconnect', (data: { gameId: string; username: string }) => {
+        const { gameId, username } = data;
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+        socket.join(`wp-game-${gameId}`);
+        wordPuzzleService.updateSocketId(gameId, username, socket.id);
+
+        const game = wordPuzzleService.getGame(gameId);
+        if (game) {
+          socket.emit('wp:game:state', {
+            gameId: game.id,
+            board: game.board,
+            gridSize: game.gridSize,
+            words: game.words,
+            players: game.players,
+            wordCount: game.wordCount,
+            status: game.status,
+          });
+        }
+      });
     });
   }
 
@@ -622,6 +868,80 @@ export class WebSocketService {
     this.rematchVotes.delete(partyId);
     this.rematchPlayers.delete(partyId);
     this.rematchWinStreak.delete(partyId);
+  }
+
+  // ── Word Puzzle helpers ──────────────────────────────────────────────────
+
+  private startWPGame(players: { username: string; socket: Socket }[], wordCount: number) {
+    const game = wordPuzzleService.createGame(
+      players.map((p) => ({ username: p.username })),
+      wordCount
+    );
+
+    for (const p of players) {
+      p.socket.join(`wp-game-${game.id}`);
+      p.socket.data.wpGameId = game.id;
+      wordPuzzleService.updateSocketId(game.id, p.username, p.socket.id);
+    }
+
+    const playerMeta = game.players.map((p) => ({
+      username: p.username,
+      score: p.score,
+      colorIndex: p.colorIndex,
+    }));
+
+    // Emit game started to each player with their seat info
+    for (const p of players) {
+      const seat = game.players.findIndex((gp) => gp.username === p.username);
+      p.socket.emit('wp:game:started', {
+        gameId: game.id,
+        board: game.board,
+        gridSize: game.gridSize,
+        words: game.words.map((w) => ({
+          id: w.id,
+          word: w.word,
+          cells: w.cells,
+          claimedBy: w.claimedBy,
+          claimedAt: w.claimedAt,
+        })),
+        players: playerMeta,
+        wordCount: game.wordCount,
+        yourColorIndex: seat % 8,
+        yourUsername: p.username,
+      });
+    }
+    console.log(`🔤 WP game started: ${game.id} (${players.map((p) => p.username).join(', ')})`);
+  }
+
+  private handleWPRoomLeave(socket: Socket) {
+    const code = socket.data.wpRoomCode as string | undefined;
+    if (!code) return;
+    const room = this.wpRooms.get(code);
+    if (!room) return;
+    const username = socket.data.username as string;
+
+    if (room.hostUsername === username) {
+      this.wpRooms.delete(code);
+      this.io.to(`wp-waiting-${code}`).emit('wp:room:closed', { reason: 'Host left the lobby' });
+      for (const s of room.members.values()) {
+        s.data.wpRoomCode = null;
+        s.leave(`wp-waiting-${code}`);
+      }
+      room.members.clear();
+      console.log(`🚪 WP room ${code} closed by host`);
+    } else {
+      room.members.delete(username);
+      socket.data.wpRoomCode = null;
+      socket.leave(`wp-waiting-${code}`);
+      this.io.to(`wp-waiting-${code}`).emit('wp:room:lobbyUpdate', {
+        players: [...room.members.keys()],
+        hostUsername: room.hostUsername,
+        wordCount: room.wordCount,
+        maxPlayers: MAX_PLAYERS_PER_GAME,
+      });
+      console.log(`🚪 ${username} left WP room ${code}`);
+    }
+    socket.data.wpRoomCode = null;
   }
 
   /** Notifies each human participant and joins them to the Socket.IO game room */
