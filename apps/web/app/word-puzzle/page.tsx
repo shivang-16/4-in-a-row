@@ -69,6 +69,12 @@ export default function WordPuzzlePage() {
   const [myColorIndex, setMyColorIndex] = useState(0);
   const [endResult, setEndResult]       = useState<WPPlayer[] | null>(null);
 
+  // ── Rematch state ──────────────────────────────────────────────────────
+  const [rematchWaiting, setRematchWaiting] = useState(false);
+  const [rematchVotes, setRematchVotes]     = useState(0);
+  const [rematchNeeded, setRematchNeeded]   = useState(0);
+  const [rematchError, setRematchError]     = useState<string | null>(null);
+
   // ── Selection state ─────────────────────────────────────────────────────
   const [selStart, setSelStart]         = useState<WPCell | null>(null);
   const [selEnd, setSelEnd]             = useState<WPCell | null>(null);
@@ -172,11 +178,27 @@ export default function WordPuzzlePage() {
     });
 
     // Game ended
-    sock.on('wp:game:ended', (data: { players: WPPlayer[]; winner: string | null; words?: WPWord[] }) => {
+    sock.on('wp:game:ended', (data: { gameId?: string; players: WPPlayer[]; winner: string | null; words?: WPWord[] }) => {
       if (data.words) setWords(data.words);
       setPlayers(data.players);
       setEndResult(data.players);
       setPhase('ended');
+      setRematchWaiting(false);
+      setRematchVotes(0);
+      setRematchNeeded(0);
+      setRematchError(null);
+    });
+
+    // Rematch progress
+    sock.on('wp:rematch:progress', (data: { votes: number; needed: number; voted: string[] }) => {
+      setRematchVotes(data.votes);
+      setRematchNeeded(data.needed);
+    });
+
+    // Rematch error
+    sock.on('wp:rematch:error', (data: { message: string }) => {
+      setRematchError(data.message);
+      setRematchWaiting(false);
     });
 
     // Room events (forwarded here when game starts from lobby)
@@ -286,6 +308,11 @@ export default function WordPuzzlePage() {
     setPlayers(data.players ?? []);
     const seat = data.players.findIndex((p: WPPlayer) => p.username === uname);
     setMyColorIndex(seat >= 0 ? seat % 8 : (data.yourColorIndex ?? 0));
+    setEndResult(null);
+    setRematchWaiting(false);
+    setRematchVotes(0);
+    setRematchNeeded(0);
+    setRematchError(null);
     setPhase('playing');
     if (solo || data.players.length === 1) {
       setIsSolo(true);
@@ -929,21 +956,47 @@ export default function WordPuzzlePage() {
                 ))}
               </div>
               <div className={styles.resultActions}>
-                <button className={styles.primaryBtn} onClick={() => {
-                  cleanupCall();
-                  stopSoloTimer();
-                  setIsSolo(false);
-                  setSoloElapsed(0);
-                  setPhase('menu');
-                  setBoard([]);
-                  setWords([]);
-                  setPlayers([]);
-                  setGameId(null);
-                  setChatMessages([]);
-                  setUnreadCount(0);
-                }}>
-                  Play Again
-                </button>
+                {isSolo ? (
+                  <button className={styles.primaryBtn} onClick={() => {
+                    stopSoloTimer();
+                    setIsSolo(false);
+                    setSoloElapsed(0);
+                    setPhase('menu');
+                    setBoard([]);
+                    setWords([]);
+                    setPlayers([]);
+                    setGameId(null);
+                  }}>
+                    Play Again
+                  </button>
+                ) : rematchWaiting ? (
+                  <button className={styles.primaryBtn} disabled>
+                    Waiting… ({rematchVotes}/{rematchNeeded})
+                  </button>
+                ) : rematchError ? (
+                  <button className={styles.primaryBtn} onClick={() => {
+                    cleanupCall();
+                    setPhase('menu');
+                    setBoard([]);
+                    setWords([]);
+                    setPlayers([]);
+                    setGameId(null);
+                    setChatMessages([]);
+                    setUnreadCount(0);
+                    setRematchError(null);
+                  }}>
+                    Back to Menu
+                  </button>
+                ) : (
+                  <button className={styles.primaryBtn} onClick={() => {
+                    if (!socket || !gameId) return;
+                    socket.emit('wp:rematch', { gameId });
+                    setRematchWaiting(true);
+                  }}>
+                    Play Again
+                  </button>
+                )}
+                {rematchError && <p className={styles.rematchErrorText}>{rematchError}</p>}
                 <button className={styles.ghostBtn} onClick={() => { cleanupCall(); stopSoloTimer(); setIsSolo(false); router.push('/'); }}>
                   Game Hub
                 </button>

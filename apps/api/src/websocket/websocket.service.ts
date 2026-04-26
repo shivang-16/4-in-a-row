@@ -38,6 +38,11 @@ export class WebSocketService {
   /** Simple FIFO matchmaking queue for word puzzle */
   private wpQueue: { username: string; socket: Socket; wordCount: number }[] = [];
   private wpQueueTimer: ReturnType<typeof setTimeout> | null = null;
+  // ── Word Puzzle rematch state ────────────────────────────────────────────
+  private wpRematchPlayers: Map<string, string[]> = new Map(); // gameId → usernames
+  private wpRematchVotes: Map<string, Set<string>> = new Map();
+  private wpRematchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  private wpRematchWordCount: Map<string, number> = new Map();
 
   constructor(httpServer: HTTPServer) {
     // Define allowed origins
@@ -783,7 +788,14 @@ export class WebSocketService {
         // If game ended, emit game over
         if (game.status === 'ended') {
           const sorted = [...game.players].sort((a, b) => b.score - a.score);
+          const playerUsernames = game.players.map((p) => p.username);
+          // Register rematch so players can play again
+          this.wpRematchPlayers.set(gameId, playerUsernames);
+          this.wpRematchVotes.set(gameId, new Set());
+          this.wpRematchWordCount.set(gameId, game.wordCount);
+
           this.io.to(`wp-game-${gameId}`).emit('wp:game:ended', {
+            gameId,
             players: sorted.map((p) => ({ username: p.username, score: p.score, colorIndex: p.colorIndex })),
             winner: sorted[0]?.username ?? null,
             words: game.words,
@@ -812,6 +824,62 @@ export class WebSocketService {
             wordCount: game.wordCount,
             status: game.status,
           });
+        }
+      });
+
+      // ── Word Puzzle rematch ─────────────────────────────────────────────────
+      socket.on('wp:rematch', (data: { gameId: string }) => {
+        const username = socket.data.username as string;
+        const { gameId } = data;
+        if (!username || !gameId) return;
+
+        const players = this.wpRematchPlayers.get(gameId);
+        if (!players?.length || !players.includes(username)) {
+          socket.emit('wp:rematch:error', { message: 'Rematch is not available.' });
+          return;
+        }
+
+        if (!this.wpRematchVotes.has(gameId)) {
+          this.wpRematchVotes.set(gameId, new Set());
+        }
+        const votes = this.wpRematchVotes.get(gameId)!;
+        votes.add(username);
+
+        const activePlayers = players.filter((u) => this.connectedPlayers.get(u)?.connected);
+
+        if (activePlayers.length < 2) {
+          this.cleanupWPRematch(gameId);
+          for (const u of activePlayers) {
+            this.connectedPlayers.get(u)?.emit('wp:rematch:error', {
+              message: 'Not enough players connected to rematch.',
+            });
+          }
+          return;
+        }
+
+        const activeVotes = [...votes].filter((u) => activePlayers.includes(u));
+        const progressPayload = {
+          gameId,
+          votes: activeVotes.length,
+          needed: activePlayers.length,
+          voted: activeVotes,
+        };
+        for (const u of activePlayers) {
+          this.connectedPlayers.get(u)?.emit('wp:rematch:progress', progressPayload);
+        }
+
+        // Start 30s timer on first vote
+        if (!this.wpRematchTimers.has(gameId)) {
+          const timer = setTimeout(() => {
+            console.log(`⏰ WP rematch timeout for game ${gameId} — starting with voters`);
+            this.startWPRematchWithVoters(gameId);
+          }, 30000);
+          this.wpRematchTimers.set(gameId, timer);
+        }
+
+        // If all active players voted, start immediately
+        if (activeVotes.length >= activePlayers.length) {
+          this.startWPRematchWithVoters(gameId);
         }
       });
     });
@@ -866,6 +934,43 @@ export class WebSocketService {
     this.rematchVotes.delete(partyId);
     this.rematchPlayers.delete(partyId);
     this.rematchWinStreak.delete(partyId);
+  }
+
+  private startWPRematchWithVoters(gameId: string) {
+    const players = this.wpRematchPlayers.get(gameId);
+    const votes = this.wpRematchVotes.get(gameId);
+    if (!players || !votes) return;
+
+    const participants = [...votes].filter((u) => this.connectedPlayers.get(u)?.connected);
+    const wordCount = this.wpRematchWordCount.get(gameId) ?? 14;
+    this.cleanupWPRematch(gameId);
+
+    if (participants.length < 2) {
+      console.log(`⚠️  WP rematch for ${gameId} cancelled — not enough voters (${participants.length})`);
+      for (const u of participants) {
+        this.connectedPlayers.get(u)?.emit('wp:rematch:error', {
+          message: 'Not enough players ready to rematch.',
+        });
+      }
+      return;
+    }
+
+    const playerData = participants.map((u) => ({
+      username: u,
+      socket: this.connectedPlayers.get(u)!,
+    }));
+
+    this.startWPGame(playerData, wordCount);
+    console.log(`🔁 WP rematch started: ${participants.join(', ')} (words: ${wordCount})`);
+  }
+
+  private cleanupWPRematch(gameId: string) {
+    const timer = this.wpRematchTimers.get(gameId);
+    if (timer) clearTimeout(timer);
+    this.wpRematchTimers.delete(gameId);
+    this.wpRematchVotes.delete(gameId);
+    this.wpRematchPlayers.delete(gameId);
+    this.wpRematchWordCount.delete(gameId);
   }
 
   // ── Word Puzzle helpers ──────────────────────────────────────────────────
