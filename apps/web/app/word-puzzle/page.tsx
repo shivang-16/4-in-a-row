@@ -43,6 +43,7 @@ export default function WordPuzzlePage() {
   const [username, setUsername]         = useState('');
   const [nameInput, setNameInput]       = useState('');
   const [nameLocked, setNameLocked]     = useState(false); // true once confirmed for this session
+  const [nameShake, setNameShake]       = useState(false);
   const [socket, setSocket]             = useState<Socket | null>(null);
   const [phase, setPhase]               = useState<GamePhase>('menu');
 
@@ -51,6 +52,7 @@ export default function WordPuzzlePage() {
   const [roomError, setRoomError]           = useState('');
   const [mmStatus, setMmStatus]             = useState('Looking for players…');
   const [menuDifficulty, setMenuDifficulty] = useState<Difficulty>('medium');
+  const [needReconnect, setNeedReconnect]   = useState<string | null>(null);
 
   // ── Solo mode state ──────────────────────────────────────────────────────
   const [isSolo, setIsSolo]                   = useState(false);
@@ -98,27 +100,25 @@ export default function WordPuzzlePage() {
 
   const boardRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
+  const pendingReconnectRef = useRef<{ gameId: string; username: string } | null>(null);
 
   // Keep chatOpenRef in sync
   useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
 
   // ── Restore pending game from sessionStorage (set by room lobby) ────────
   useEffect(() => {
-    const saved = sessionStorage.getItem('4inarow_username');
-    if (saved) {
-      setUsername(saved);
-      setNameInput(saved);
-      setNameLocked(true);
-    }
-
     const pending = sessionStorage.getItem('wp_pendingGame');
     if (pending) {
       sessionStorage.removeItem('wp_pendingGame');
       const data = JSON.parse(pending);
-      const uname = data.username || saved || '';
+      const uname = data.username || '';
       setUsername(uname);
+      setNameInput(uname);
       setNameLocked(true);
       initGame(data, uname);
+      // Store gameId so connectSocket can rejoin the room on connect
+      pendingReconnectRef.current = { gameId: data.gameId, username: uname };
+      setNeedReconnect(uname);
     }
   }, []);
 
@@ -132,6 +132,12 @@ export default function WordPuzzlePage() {
 
     sock.on('connect', () => {
       sock.emit('player:join', { username: uname });
+      // If coming from room lobby, rejoin the game room for chat/call
+      const pr = pendingReconnectRef.current;
+      if (pr) {
+        sock.emit('wp:game:reconnect', { gameId: pr.gameId, username: pr.username });
+        pendingReconnectRef.current = null;
+      }
     });
 
     // Matchmaking
@@ -263,6 +269,14 @@ export default function WordPuzzlePage() {
 
     return sock;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-connect socket when navigating from room lobby with a pending game
+  useEffect(() => {
+    if (needReconnect) {
+      connectSocket(needReconnect);
+      setNeedReconnect(null);
+    }
+  }, [needReconnect, connectSocket]);
 
   function initGame(data: any, uname: string, solo = false) {
     setGameId(data.gameId);
@@ -431,6 +445,11 @@ export default function WordPuzzlePage() {
   }, [chatInput, socket, gameId, username]);
 
   // ── Menu: set username & play ───────────────────────────────────────────
+  const triggerNameShake = useCallback(() => {
+    setNameShake(true);
+    setTimeout(() => setNameShake(false), 600);
+  }, []);
+
   const handleSetUsername = useCallback((name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -623,31 +642,31 @@ export default function WordPuzzlePage() {
                 setNameLocked(false);
               }}
               onKeyDown={(e) => e.key === 'Enter' && handleSetUsername(nameInput)}
-              className={styles.nameInput}
+              className={`${styles.nameInput} ${nameShake ? styles.nameInputShake : ''}`}
               maxLength={20}
             />
           </div>
 
           <div className={styles.modeGrid}>
             <button className={styles.modeCard} onClick={() => {
-              const u = nameInput.trim(); if (!u) return;
+              const u = nameInput.trim(); if (!u) { triggerNameShake(); return; }
               handleSetUsername(u);
               const sock = connectSocket(u);
               setPhase('matchmaking'); setMmStatus('Looking for players…');
               const wc = DIFFICULTIES.find((d) => d.id === menuDifficulty)?.wordCount ?? 14;
               sock.emit('wp:matchmaking:join', { username: u, wordCount: wc });
-            }} disabled={!nameInput.trim()}>
+            }}>
               <Users size={22} className={styles.modeIcon} />
               <span className={styles.modeLabel}>Find Player</span>
               <span className={styles.modeHint}>Quick online match</span>
             </button>
 
             <button className={styles.modeCard} onClick={() => {
-              const u = nameInput.trim(); if (!u) return;
+              const u = nameInput.trim(); if (!u) { triggerNameShake(); return; }
               handleSetUsername(u);
               sessionStorage.setItem('4inarow_username', u);
               router.push('/word-puzzle/room/new');
-            }} disabled={!nameInput.trim()}>
+            }}>
               <HomeIcon size={22} className={styles.modeIcon} />
               <span className={styles.modeLabel}>Play with Friends</span>
               <span className={styles.modeHint}>Up to 8 friends</span>
@@ -656,9 +675,9 @@ export default function WordPuzzlePage() {
 
           {/* Solo play card — full width, distinct colour */}
           <button className={styles.soloCard} onClick={() => {
-            const u = nameInput.trim(); if (!u) return;
+            const u = nameInput.trim(); if (!u) { triggerNameShake(); return; }
             handleSetUsername(u); setPhase('solo-setup');
-          }} disabled={!nameInput.trim()}>
+          }}>
             <span className={styles.soloCardEmoji}>🧩</span>
             <span className={styles.soloCardLabel}>Solo Play</span>
             <span className={styles.soloCardHint}>Beat the clock, no opponents</span>
@@ -694,12 +713,14 @@ export default function WordPuzzlePage() {
             <button
               className={styles.secondaryBtn}
               onClick={() => {
-                const u = nameInput.trim(); if (!u) return;
+                const u = nameInput.trim();
+                if (!u) { triggerNameShake(); return; }
+                if (!friendRoomCode.trim()) return;
                 handleSetUsername(u);
                 sessionStorage.setItem('4inarow_username', u);
                 router.push(`/word-puzzle/room/${friendRoomCode.trim().toUpperCase()}`);
               }}
-              disabled={!friendRoomCode.trim() || !nameInput.trim()}
+              disabled={!friendRoomCode.trim()}
             >
               <Rocket size={14} />Join Room
             </button>

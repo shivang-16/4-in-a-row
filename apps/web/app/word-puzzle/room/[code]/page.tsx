@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import {
@@ -32,16 +32,18 @@ export const WP_PLAYER_COLORS = [
   { id: 7, label: 'Orange', hex: '#fb923c' },
 ];
 
-type Status = 'loading' | 'lobby' | 'starting' | 'closed';
+type Status = 'name_prompt' | 'connecting' | 'lobby' | 'starting' | 'closed';
 
 export default function WPRoomPage() {
   const { code: rawCode } = useParams<{ code: string }>();
   const router = useRouter();
 
   const isCreateMode = rawCode === 'new';
-  const [status, setStatus]           = useState<Status>('loading');
+  const [status, setStatus]           = useState<Status>('name_prompt');
   const [socket, setSocket]           = useState<Socket | null>(null);
   const [username, setUsername]       = useState('');
+  const [nameInput, setNameInput]     = useState('');
+  const [nameError, setNameError]     = useState(false);
   const [roomCode, setRoomCode]       = useState('');
   const [players, setPlayers]         = useState<string[]>([]);
   const [hostUsername, setHost]       = useState('');
@@ -49,6 +51,7 @@ export default function WPRoomPage() {
   const [wordCount, setWordCount]     = useState(14);
   const [roomError, setRoomError]     = useState('');
   const [copied, setCopied]           = useState(false);
+  const socketRef = useRef<Socket | null>(null);
 
   const shareableUrl =
     typeof window !== 'undefined' && roomCode
@@ -57,22 +60,29 @@ export default function WPRoomPage() {
 
   const isHost = username === hostUsername;
 
-  // Read name from sessionStorage and connect immediately
-  useEffect(() => {
-    const saved = sessionStorage.getItem('4inarow_username') ?? '';
-    if (!saved) {
-      // No name saved — send back to word puzzle home to enter name first
-      router.replace('/word-puzzle');
+  // ── Name submit handler ────────────────────────────────────────────────
+  const handleNameSubmit = useCallback(() => {
+    const trimmed = nameInput.trim();
+    if (!trimmed) {
+      setNameError(true);
+      setTimeout(() => setNameError(false), 600);
       return;
     }
-    setUsername(saved);
-  }, [router]);
+    sessionStorage.setItem('4inarow_username', trimmed);
+    setUsername(trimmed);
+    setStatus('connecting');
+  }, [nameInput]);
 
   // ── Connect once username is set ────────────────────────────────────────
   useEffect(() => {
-    if (!username) return;
+    if (!username || status !== 'connecting') return;
+
+    // Prevent re-running this effect when status changes later
+    const alreadyConnected = socketRef.current?.connected;
+    if (alreadyConnected) return;
 
     const sock = io(API_URL, { transports: ['websocket', 'polling'] });
+    socketRef.current = sock;
     setSocket(sock);
 
     sock.on('connect', () => {
@@ -89,6 +99,7 @@ export default function WPRoomPage() {
       setHost(data.hostUsername);
       setPlayers([data.hostUsername]);
       setStatus('lobby');
+      window.history.replaceState(null, '', `/word-puzzle/room/${data.roomCode}`);
     });
 
     sock.on('wp:room:joinPending', (data: {
@@ -129,7 +140,7 @@ export default function WPRoomPage() {
       setStatus('closed');
     });
 
-    return () => { sock.close(); };
+    return () => { sock.close(); socketRef.current = null; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username]);
 
@@ -156,8 +167,44 @@ export default function WPRoomPage() {
     socket?.emit('wp:room:setWordCount', { wordCount: def.wordCount });
   }, [socket]);
 
-  // ── Render: loading ─────────────────────────────────────────────────
-  if (status === 'loading') {
+  // ── Render: name prompt ─────────────────────────────────────────────
+  if (status === 'name_prompt') {
+    return (
+      <div className={styles.page}>
+        <div className={styles.promptCard}>
+          <div className={styles.promptIcon}>📝</div>
+          <h2 className={styles.promptTitle}>
+            {isCreateMode ? 'Create Word Search Room' : 'Join Word Search'}
+          </h2>
+          <p className={styles.promptSub}>
+            {isCreateMode
+              ? 'Enter your name to create a new room'
+              : <>Enter your name to join room <strong>{rawCode.toUpperCase()}</strong></>
+            }
+          </p>
+          <div className={`${styles.nameInputWrap} ${nameError ? styles.nameInputError : ''}`}>
+            <input
+              className={styles.nameInput}
+              type="text"
+              placeholder="Your name…"
+              maxLength={16}
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleNameSubmit()}
+              autoFocus
+            />
+          </div>
+          {nameError && <p className={styles.nameErrorText}>Please enter a name to continue</p>}
+          <button className={styles.btnPrimary} onClick={handleNameSubmit}>
+            {isCreateMode ? 'Create Room' : 'Join Room'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render: connecting ─────────────────────────────────────────────────
+  if (status === 'connecting') {
     return (
       <div className={styles.page}>
         <div className={styles.promptCard}>
