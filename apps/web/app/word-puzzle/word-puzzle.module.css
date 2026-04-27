@@ -1103,21 +1103,130 @@
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   MOBILE
+   MOBILE  ≤ 900 px
+   Column layout:
+     topBar  (~48 px)
+     wordList  horizontal scroll strip (72 px tall)
+     boardWrap  fills all remaining height — board is a square
+                that fits exactly so no scroll is needed on board
 ───────────────────────────────────────────────────────────────── */
-@media (max-width: 640px) {
-  .wordList, .scoreboard { width: 72px; padding: 8px 5px; }
-  .wordListTitle, .scoreTitle { display: none; }
-  .wordItemText { font-size: 0.6rem; letter-spacing: 0.5px; }
-  .wordOwner { display: none; }
-  .scoreName { font-size: 0.6rem; }
-  .scoreVal  { font-size: 0.6rem; }
-  .scoreRank { display: none; }
-  .boardWrap { padding: 8px; }
-  .board { padding: 8px; }
-  .myScore { display: none; }
+@media (max-width: 900px) {
+  /* ── Menu ── */
   .menuCard { padding: 28px 18px 24px; }
   .modeGrid { grid-template-columns: 1fr; gap: 8px; }
+
+  /* ── Top bar: compact ── */
+  .topBar { padding: 8px 10px; gap: 8px; }
+
+  /* ── Game layout: column — words on top, board below ── */
+  .gameLayout {
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Word list: horizontal scroll strip pinned at TOP ── */
+  .wordList {
+    width: 100% !important;
+    height: 72px !important;
+    flex-shrink: 0;
+    flex-direction: row !important;
+    padding: 6px 8px !important;
+    border-right: none !important;
+    border-bottom: 3px solid #3d1f0a;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    gap: 4px;
+    box-shadow: inset 0 -2px 6px rgba(0,0,0,0.4);
+  }
+  .wordListTitle { display: none; }
+
+  .wordItems {
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 4px;
+  }
+  .wordItemWrapper { flex-shrink: 0; }
+  .wordItem        { padding: 4px 6px; flex-shrink: 0; white-space: nowrap; }
+  .wordItemText    { font-size: 0.65rem; letter-spacing: 0.3px; white-space: nowrap; }
+  .wordOwner       { display: none; }
+  .wordActionBtn   { width: 18px; height: 18px; }
+
+  /* ── Board wrap: fills remaining height, scrolls horizontally ── */
+  .boardWrap {
+    flex: 1;
+    min-height: 0;
+    padding: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  /*
+   * Board: fixed width = grid-size × 36px so every cell is comfortably
+   * tappable. Height = same value so it stays square.
+   * boardWrap scrolls horizontally to reveal hidden columns.
+   * touch-action:none on the board only blocks scroll ON the board —
+   * the outer boardWrap (no touch-action set) handles the pan.
+   */
+  .board {
+    width: calc(var(--grid-size, 15) * 30px) !important;
+    height: calc(var(--grid-size, 15) * 30px) !important;
+    flex-shrink: 0;
+    padding: 6px;
+  }
+
+  .cell {
+    font-size: 16px;
+    aspect-ratio: 1;
+  }
+
+  /* ── Scoreboard: horizontal strip at the bottom ── */
+  .scoreboard {
+    display: flex !important;
+    flex-direction: row !important;
+    width: 100% !important;
+    height: auto !important;
+    flex-shrink: 0;
+    padding: 6px 10px !important;
+    gap: 6px !important;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    border-left: none !important;
+    border-top: 3px solid #3d1f0a;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
+    align-items: center;
+  }
+  .scoreTitle {
+    display: none;
+  }
+  .scoreRow {
+    flex-shrink: 0;
+    flex-direction: row;
+    gap: 5px;
+    padding: 5px 8px;
+    white-space: nowrap;
+  }
+  .scoreRank { display: none; }
+  .scoreName { font-size: 0.65rem; max-width: none; }
+  .scoreVal  { font-size: 0.65rem; }
+  .myScore   { display: none; }
+
+  /* ── Definition popup: float above word strip ── */
+  .wordDefPopup {
+    position: fixed;
+    bottom: 84px;
+    left: 8px;
+    right: 8px;
+    border-radius: 8px;
+    margin-top: 0;
+    z-index: 50;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -1127,13 +1236,12 @@
 /* Right-side sliding panel */
 .wpChatPanel {
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 12px;
   bottom: 12px;
   top: auto;
   width: 52px;
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: flex-end;
   gap: 6px;
   z-index: 200;
@@ -1141,7 +1249,7 @@
 }
 .wpChatPanel > * { pointer-events: all; }
 
-/* When open, expand upward from center */
+/* When open, expand upward from right edge */
 .wpChatOpen {
   width: 300px;
   flex-direction: column;
