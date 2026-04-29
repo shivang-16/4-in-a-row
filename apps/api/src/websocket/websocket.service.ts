@@ -7,6 +7,8 @@ import { gameManager } from '../services/game-manager.service';
 import { Position, MAX_PLAYERS_PER_GAME, GameState } from '../types/game';
 import { wordPuzzleService, gridSizeForWordCount } from '../services/word-puzzle.service';
 import { WPRoom, generateRoomCode } from '../types/word-puzzle';
+import { dotsAndBoxesService } from '../services/dots-and-boxes.service';
+import { DABRoom, generateDABRoomCode, initDABGame, LineOwner } from '../types/dots-and-boxes';
 
 export class WebSocketService {
   private io: SocketIOServer;
@@ -43,6 +45,12 @@ export class WebSocketService {
   private wpRematchVotes: Map<string, Set<string>> = new Map();
   private wpRematchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private wpRematchWordCount: Map<string, number> = new Map();
+
+  // ── Dots & Boxes state ───────────────────────────────────────────────────
+  private dabRooms: Map<string, DABRoom> = new Map();
+  private dabQueue: { username: string; socket: Socket; gridRows: number; gridCols: number }[] = [];
+  private dabRematchVotes: Map<string, Set<string>> = new Map();
+  private dabRematchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   constructor(httpServer: HTTPServer) {
     // Define allowed origins
@@ -521,7 +529,7 @@ export class WebSocketService {
         if (!username || !gameId) return;
         if (!this.callRooms.has(gameId)) this.callRooms.set(gameId, new Set());
         this.callRooms.get(gameId)!.add(username);
-        socket.to(gameId).to(`wp-game-${gameId}`).emit('call:ringing', { from: username, gameId });
+        socket.to(gameId).to(`wp-game-${gameId}`).to(`dab-game-${gameId}`).emit('call:ringing', { from: username, gameId });
         console.log(`📞 Call started by ${username} in game ${gameId}`);
       });
 
@@ -547,7 +555,7 @@ export class WebSocketService {
       // Player rejects call
       socket.on('call:reject', (data: { gameId: string }) => {
         const username = socket.data.username as string;
-        socket.to(data.gameId).to(`wp-game-${data.gameId}`).emit('call:rejected', { username });
+        socket.to(data.gameId).to(`wp-game-${data.gameId}`).to(`dab-game-${data.gameId}`).emit('call:rejected', { username });
       });
 
       // Relay WebRTC offer to target peer
@@ -577,13 +585,13 @@ export class WebSocketService {
         const { gameId } = data;
         this.callRooms.get(gameId)?.delete(username);
         if (this.callRooms.get(gameId)?.size === 0) this.callRooms.delete(gameId);
-        socket.to(gameId).to(`wp-game-${gameId}`).emit('call:peer_left', { username, gameId });
+        socket.to(gameId).to(`wp-game-${gameId}`).to(`dab-game-${gameId}`).emit('call:peer_left', { username, gameId });
         console.log(`📞 ${username} left call in game ${gameId}`);
       });
 
       socket.on('call:mute', (data: { gameId: string; muted: boolean }) => {
         const username = socket.data.username as string;
-        socket.to(data.gameId).to(`wp-game-${data.gameId}`).emit('call:mute', { username, muted: data.muted });
+        socket.to(data.gameId).to(`wp-game-${data.gameId}`).to(`dab-game-${data.gameId}`).emit('call:mute', { username, muted: data.muted });
       });
 
       // ── Word Puzzle events (wp: prefix) ────────────────────────────────────
@@ -882,6 +890,339 @@ export class WebSocketService {
           this.startWPRematchWithVoters(gameId);
         }
       });
+
+      // ══════════════════════════════════════════════════════════════════════
+      // DOTS & BOXES — Socket Event Handlers
+      // ══════════════════════════════════════════════════════════════════════
+
+      const MAX_DAB_PLAYERS = 8;
+
+      // ── Room: create ─────────────────────────────────────────────────────
+      socket.on('dab:room:create', (data: { username: string; gridRows?: number; gridCols?: number }) => {
+        const { username } = data;
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+
+        const code = generateDABRoomCode();
+        const members = new Map<string, Socket>();
+        members.set(username, socket);
+
+        const room: DABRoom = {
+          code,
+          hostUsername: username,
+          members,
+          gridRows: data.gridRows ?? 5,
+          gridCols: data.gridCols ?? 5,
+          maxPlayers: MAX_DAB_PLAYERS,
+          status: 'lobby',
+        };
+        this.dabRooms.set(code, room);
+        socket.data.dabRoomCode = code;
+        socket.join(`dab-lobby-${code}`);
+
+        socket.emit('dab:room:created', { roomCode: code, hostUsername: username });
+        this.io.to(`dab-lobby-${code}`).emit('dab:room:lobbyUpdate', {
+          players: [username],
+          hostUsername: username,
+          gridRows: room.gridRows,
+          gridCols: room.gridCols,
+          maxPlayers: MAX_DAB_PLAYERS,
+        });
+        console.log(`🟣 DAB room created: ${code} by ${username}`);
+      });
+
+      // ── Room: join ───────────────────────────────────────────────────────
+      socket.on('dab:room:join', (data: { username: string; roomCode: string }) => {
+        const { username, roomCode } = data;
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+        const code = roomCode.toUpperCase().trim();
+        const room = this.dabRooms.get(code);
+
+        if (!room) {
+          socket.emit('dab:room:error', { message: 'Room not found. Check the code and try again.' });
+          return;
+        }
+        if (room.status !== 'lobby') {
+          socket.emit('dab:room:error', { message: 'This game has already started.' });
+          return;
+        }
+        if (room.members.size >= MAX_DAB_PLAYERS) {
+          socket.emit('dab:room:error', { message: 'This room is full (max 8 players).' });
+          return;
+        }
+
+        // Handle reconnect
+        if (room.members.has(username)) {
+          room.members.set(username, socket);
+          socket.data.dabRoomCode = code;
+          socket.join(`dab-lobby-${code}`);
+          socket.emit('dab:room:joinPending', {
+            roomCode: code,
+            players: [...room.members.keys()],
+            hostUsername: room.hostUsername,
+            gridRows: room.gridRows,
+            gridCols: room.gridCols,
+            maxPlayers: MAX_DAB_PLAYERS,
+          });
+          return;
+        }
+
+        room.members.set(username, socket);
+        socket.data.dabRoomCode = code;
+        socket.join(`dab-lobby-${code}`);
+
+        const playerList = [...room.members.keys()];
+        this.io.to(`dab-lobby-${code}`).emit('dab:room:lobbyUpdate', {
+          players: playerList,
+          hostUsername: room.hostUsername,
+          gridRows: room.gridRows,
+          gridCols: room.gridCols,
+          maxPlayers: MAX_DAB_PLAYERS,
+        });
+        socket.emit('dab:room:joinPending', {
+          roomCode: code,
+          players: playerList,
+          hostUsername: room.hostUsername,
+          gridRows: room.gridRows,
+          gridCols: room.gridCols,
+          maxPlayers: MAX_DAB_PLAYERS,
+        });
+        console.log(`🟣 ${username} joined DAB room ${code}`);
+      });
+
+      // ── Room: leave ──────────────────────────────────────────────────────
+      socket.on('dab:room:leave', () => {
+        this.handleDABRoomLeave(socket);
+      });
+
+      // ── Host sets grid ───────────────────────────────────────────────────
+      socket.on('dab:room:setGrid', (data: { gridRows: number; gridCols: number }) => {
+        const code = socket.data.dabRoomCode as string | undefined;
+        if (!code) return;
+        const room = this.dabRooms.get(code);
+        if (!room || room.hostUsername !== socket.data.username) return;
+
+        room.gridRows = Math.max(2, Math.min(15, data.gridRows));
+        room.gridCols = Math.max(2, Math.min(15, data.gridCols));
+
+        this.io.to(`dab-lobby-${code}`).emit('dab:room:lobbyUpdate', {
+          players: [...room.members.keys()],
+          hostUsername: room.hostUsername,
+          gridRows: room.gridRows,
+          gridCols: room.gridCols,
+          maxPlayers: MAX_DAB_PLAYERS,
+        });
+        console.log(`🟣 DAB room ${code}: grid set to ${room.gridRows}×${room.gridCols}`);
+      });
+
+      // ── Host starts game ─────────────────────────────────────────────────
+      socket.on('dab:room:start', () => {
+        const code = socket.data.dabRoomCode as string | undefined;
+        if (!code) return;
+        const room = this.dabRooms.get(code);
+        if (!room) return;
+
+        if (room.hostUsername !== socket.data.username) {
+          socket.emit('dab:room:error', { message: 'Only the host can start the game.' });
+          return;
+        }
+        if (room.members.size < 2) {
+          socket.emit('dab:room:error', { message: 'Need at least 2 players to start.' });
+          return;
+        }
+
+        const playerList = [...room.members.keys()];
+        this.startDABGame(room, playerList);
+        console.log(`🟣 DAB room ${code} game started: ${playerList.join(', ')}`);
+      });
+
+      // ── Quick match queue ────────────────────────────────────────────────
+      socket.on('dab:queue:join', (data: { username: string; gridRows: number; gridCols: number }) => {
+        const { username, gridRows, gridCols } = data;
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+        this.dabQueue = this.dabQueue.filter((e) => e.username !== username);
+        this.dabQueue.push({ username, socket, gridRows, gridCols });
+        socket.emit('dab:queue:queued', { position: this.dabQueue.length });
+
+        if (this.dabQueue.length >= 2) {
+          const pair = this.dabQueue.splice(0, 2);
+          const avgRows = Math.round(((pair[0]?.gridRows ?? 5) + (pair[1]?.gridRows ?? 5)) / 2);
+          const avgCols = Math.round(((pair[0]?.gridCols ?? 5) + (pair[1]?.gridCols ?? 5)) / 2);
+
+          const code = generateDABRoomCode();
+          const members = new Map<string, Socket>();
+          for (const p of pair) members.set(p.username, p.socket);
+          const room: DABRoom = {
+            code,
+            hostUsername: pair[0]!.username,
+            members,
+            gridRows: avgRows,
+            gridCols: avgCols,
+            maxPlayers: 2,
+            status: 'lobby',
+          };
+          this.dabRooms.set(code, room);
+          this.startDABGame(room, pair.map((p) => p.username));
+        }
+      });
+
+      socket.on('dab:queue:leave', () => {
+        const username = socket.data.username as string;
+        if (username) this.dabQueue = this.dabQueue.filter((e) => e.username !== username);
+      });
+
+      // ── Rejoin (friend-room game page reconnect) ──────────────────────────
+      // When the lobby page navigates to the game page a fresh socket is created.
+      // This event re-attaches that socket to the in-progress game room so that
+      // dab:move:made / dab:chat:message broadcasts reach the new connection.
+      socket.on('dab:rejoin', (data: { gameId: string; username: string }) => {
+        const { gameId, username } = data;
+        if (!gameId || !username) return;
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+
+        const room = [...this.dabRooms.values()].find((r) => r.gameId === gameId);
+        if (!room) {
+          console.log(`🟣 dab:rejoin — room not found for gameId=${gameId}`);
+          return;
+        }
+
+        // Update the members map so future broadcasts / turn checks use the new socket
+        room.members.set(username, socket);
+        socket.data.dabGameId  = gameId;
+        socket.data.dabRoomCode = room.code;
+        socket.join(`dab-game-${gameId}`);
+        console.log(`🟣 dab:rejoin — ${username} rejoined game ${gameId}`);
+        socket.emit('dab:rejoined', { gameId });
+      });
+
+      // ── Game move ────────────────────────────────────────────────────────
+      socket.on('dab:move', (data: { gameId: string; type: 'h' | 'v'; row: number; col: number }) => {
+        const username = socket.data.username as string;
+        const { gameId, type, row, col } = data;
+        console.log(`🟣 dab:move received — user=${username} gameId=${gameId} type=${type} r=${row} c=${col}`);
+        if (!username || !gameId) {
+          console.log(`🟣 dab:move — rejected: missing username or gameId`);
+          return;
+        }
+
+        // Find the room with this gameId
+        const room = [...this.dabRooms.values()].find((r) => r.gameId === gameId);
+        if (!room || room.status !== 'playing') {
+          console.log(`🟣 dab:move — rejected: room not found or not playing (status=${room?.status})`);
+          return;
+        }
+
+        const players = room.players!;
+        const currentIdx = room.currentTurn!;
+        if (players[currentIdx] !== username) {
+          console.log(`🟣 dab:move — rejected: not your turn (expected=${players[currentIdx]}, got=${username})`);
+          socket.emit('dab:error', { message: 'Not your turn.' });
+          return;
+        }
+
+        // Validate move bounds
+        const { hLines, vLines, boxes } = room;
+        if (type === 'h') {
+          if (row < 0 || row > room.gridRows || col < 0 || col >= room.gridCols) return;
+          if (hLines![row]![col] !== null) return;
+        } else {
+          if (row < 0 || row >= room.gridRows || col < 0 || col > room.gridCols) return;
+          if (vLines![row]![col] !== null) return;
+        }
+
+        const result = dotsAndBoxesService.makeMove(
+          hLines!, vLines!, boxes!,
+          room.scores!, players.length, currentIdx,
+          players, type, row, col
+        );
+
+        // Update room state
+        room.hLines = result.hLines;
+        room.vLines = result.vLines;
+        room.boxes = result.boxes;
+        room.scores = result.scores;
+        room.currentTurn = result.currentTurn;
+
+        const payload = {
+          gameId,
+          hLines: result.hLines,
+          vLines: result.vLines,
+          boxes: result.boxes,
+          scores: result.scores,
+          currentTurn: result.currentTurn,
+          currentPlayer: players[result.currentTurn]!,
+          boxesCompleted: result.boxesCompleted,
+          lastMove: { playerIdx: currentIdx, type, row, col },
+        };
+        this.io.to(`dab-game-${gameId}`).emit('dab:move:made', payload);
+
+        if (result.gameOver) {
+          room.status = 'ended';
+          room.winner = result.winner;
+          const endPayload = {
+            gameId,
+            scores: result.scores,
+            players,
+            winner: result.winner,
+            rankings: result.rankings,
+            partyId: room.partyId,
+          };
+          this.io.to(`dab-game-${gameId}`).emit('dab:game:ended', endPayload);
+
+          // Setup rematch
+          if (players.length >= 2) {
+            this.dabRematchVotes.set(gameId, new Set());
+          }
+          console.log(`🟣 DAB game ${gameId} ended. Winner: ${result.winner}`);
+        }
+      });
+
+      // ── Rematch vote ─────────────────────────────────────────────────────
+      socket.on('dab:rematch:vote', (data: { gameId: string }) => {
+        const username = socket.data.username as string;
+        const { gameId } = data;
+        if (!username || !gameId) return;
+
+        const room = [...this.dabRooms.values()].find((r) => r.gameId === gameId);
+        if (!room || room.status !== 'ended') return;
+
+        let votes = this.dabRematchVotes.get(gameId);
+        if (!votes) { votes = new Set(); this.dabRematchVotes.set(gameId, votes); }
+        votes.add(username);
+
+        const players = room.players!;
+        const activePlayers = players.filter((u) => this.connectedPlayers.get(u)?.connected);
+
+        const progressPayload = { gameId, votes: votes.size, needed: activePlayers.length, voted: [...votes] };
+        for (const u of activePlayers) {
+          this.connectedPlayers.get(u)?.emit('dab:rematch:progress', progressPayload);
+        }
+
+        if (!this.dabRematchTimers.has(gameId)) {
+          const timer = setTimeout(() => this.startDABRematch(gameId), 30000);
+          this.dabRematchTimers.set(gameId, timer);
+        }
+
+        if (votes.size >= activePlayers.length) {
+          this.startDABRematch(gameId);
+        }
+      });
+
+      // ── Chat ─────────────────────────────────────────────────────────────
+      socket.on('dab:chat', (data: { gameId: string; message: string }) => {
+        const username = socket.data.username as string;
+        const { gameId, message } = data;
+        if (!username || !gameId || !message?.trim()) return;
+
+        this.io.to(`dab-game-${gameId}`).emit('dab:chat:message', {
+          username,
+          message: message.trim().slice(0, 200),
+          timestamp: Date.now(),
+        });
+      });
     });
   }
 
@@ -1160,6 +1501,119 @@ export class WebSocketService {
   // Get WebSocket server instance
   public getIO(): SocketIOServer {
     return this.io;
+  }
+
+  // ── Dots & Boxes helpers ─────────────────────────────────────────────────
+
+  private startDABGame(room: DABRoom, playerList: string[]) {
+    const code = room.code;
+    const { gameId, hLines, vLines, boxes, scores, currentTurn } = initDABGame(
+      room.gridRows,
+      room.gridCols,
+      playerList.length
+    );
+
+    room.status = 'playing';
+    room.gameId = gameId;
+    room.players = playerList;
+    room.hLines = hLines;
+    room.vLines = vLines;
+    room.boxes = boxes;
+    room.scores = scores;
+    room.currentTurn = currentTurn;
+    room.partyId = gameId; // use gameId as party for rematch
+
+    for (const username of playerList) {
+      const s = room.members.get(username);
+      if (!s) continue;
+      s.data.dabRoomCode = code;
+      s.data.dabGameId = gameId;
+      s.join(`dab-game-${gameId}`);
+      s.leave(`dab-lobby-${code}`);
+    }
+
+    const startPayload = {
+      gameId,
+      players: playerList,
+      gridRows: room.gridRows,
+      gridCols: room.gridCols,
+      hLines,
+      vLines,
+      boxes,
+      scores,
+      currentTurn,
+      currentPlayer: playerList[currentTurn]!,
+    };
+
+    for (let i = 0; i < playerList.length; i++) {
+      const s = room.members.get(playerList[i]!);
+      if (!s) continue;
+      s.emit('dab:game:started', {
+        ...startPayload,
+        yourIndex: i,
+        yourUsername: playerList[i],
+      });
+    }
+
+    console.log(`🟣 DAB game started: ${gameId} — ${playerList.join(', ')} (${room.gridRows}×${room.gridCols})`);
+  }
+
+  private startDABRematch(gameId: string) {
+    const room = [...this.dabRooms.values()].find((r) => r.gameId === gameId);
+    if (!room) return;
+
+    const votes = this.dabRematchVotes.get(gameId);
+    const timer = this.dabRematchTimers.get(gameId);
+    if (timer) clearTimeout(timer);
+    this.dabRematchTimers.delete(gameId);
+    this.dabRematchVotes.delete(gameId);
+
+    const participants = (votes ? [...votes] : []).filter(
+      (u) => this.connectedPlayers.get(u)?.connected
+    );
+
+    if (participants.length < 2) {
+      for (const u of participants) {
+        this.connectedPlayers.get(u)?.emit('dab:rematch:error', { message: 'Not enough players for rematch.' });
+      }
+      return;
+    }
+
+    // Re-seat participants and restart
+    room.members = new Map(participants.map((u) => [u, this.connectedPlayers.get(u)!]));
+    room.hostUsername = participants[0]!;
+    this.startDABGame(room, participants);
+    console.log(`🔁 DAB rematch started: ${participants.join(', ')}`);
+  }
+
+  private handleDABRoomLeave(socket: Socket) {
+    const code = socket.data.dabRoomCode as string | undefined;
+    if (!code) return;
+    const room = this.dabRooms.get(code);
+    if (!room) return;
+
+    const username = socket.data.username as string;
+    room.members.delete(username);
+    socket.leave(`dab-lobby-${code}`);
+    socket.data.dabRoomCode = null;
+
+    if (room.members.size === 0) {
+      this.dabRooms.delete(code);
+      return;
+    }
+
+    // Transfer host if host left
+    if (room.hostUsername === username) {
+      room.hostUsername = [...room.members.keys()][0]!;
+    }
+
+    this.io.to(`dab-lobby-${code}`).emit('dab:room:lobbyUpdate', {
+      players: [...room.members.keys()],
+      hostUsername: room.hostUsername,
+      gridRows: room.gridRows,
+      gridCols: room.gridCols,
+      maxPlayers: room.maxPlayers,
+    });
   }
 }
 

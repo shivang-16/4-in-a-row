@@ -26,6 +26,17 @@ const GAMES = [
     tags: ['1-8 Players', 'Words', 'Competitive'],
     players: '1-8',
   },
+  {
+    href: '/dots-and-boxes',
+    title: 'Dots & Boxes',
+    icon: '⬜',
+    accent: '#a044ff',
+    glow: 'rgba(160,68,255,0.3)',
+    gradient: 'linear-gradient(135deg, #a044ff 0%, #6a3093 100%)',
+    description: 'Draw lines between dots to claim boxes. Complete a box, take another turn — the most boxes wins!',
+    tags: ['1-8 Players', 'Strategy', 'VS Bot'],
+    players: '1-8',
+  },
 ];
 
 export default function HubPage() {

@@ -1,0 +1,469 @@
+.page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background:
+    linear-gradient(rgba(10, 3, 20, 0.72), rgba(10, 3, 20, 0.72)),
+    url('/image1.jpg') center/cover no-repeat fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  font-family: var(--font-lilita), 'Courier New', monospace;
+  color: #fff;
+  cursor: url("data:image/svg+xml,%3Csvg width='32' height='32' viewBox='0 0 32 32' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 2L12 28L16 16L28 12L2 2Z' fill='%23a044ff' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 2 2, crosshair;
+}
+
+/* ── Card ─────────────────────────────────────────────────────────── */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 36px 32px;
+  border-radius: 20px;
+  background: rgba(20, 8, 40, 0.88);
+  border: 2px solid rgba(160, 68, 255, 0.4);
+  box-shadow:
+    0 0 30px rgba(160, 68, 255, 0.15),
+    0 20px 60px rgba(0, 0, 0, 0.6);
+  width: 100%;
+  max-width: 520px;
+  backdrop-filter: blur(12px);
+  animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popIn {
+  from { transform: scale(0.88); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+
+/* ── Title ──────────────────────────────────────────────────────────── */
+.gameTitle {
+  font-size: 2.2rem;
+  text-align: center;
+  background: linear-gradient(180deg, #e0aaff 0%, #a044ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0px 3px 0px #5a1a9e);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.gameSubtitle {
+  text-align: center;
+  color: #b0a0cc;
+  font-size: 0.9rem;
+  margin-top: -12px;
+}
+
+/* ── Name prompt ─────────────────────────────────────────────────── */
+.nameSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.label {
+  font-size: 0.9rem;
+  color: #e0aaff;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+.input {
+  padding: 14px 22px;
+  font-size: 1.1rem;
+  border-radius: 12px;
+  border: 2px solid rgba(160, 68, 255, 0.4);
+  background: rgba(15, 5, 24, 0.85);
+  color: #fff;
+  font-family: inherit;
+  width: 100%;
+  max-width: 320px;
+  text-align: center;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.input:focus {
+  outline: none;
+  border-color: #a044ff;
+  box-shadow: 0 0 14px rgba(160, 68, 255, 0.3), inset 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.inputShake {
+  animation: shake 0.45s ease;
+  border-color: #ff4444 !important;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-7px); }
+  40%, 80% { transform: translateX(7px); }
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────── */
+.btn {
+  padding: 13px 28px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: transform 0.1s, box-shadow 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btnPrimary {
+  background: linear-gradient(180deg, #bb77ff 0%, #a044ff 100%);
+  color: #fff;
+  box-shadow: 0 5px 0 #6a2c91, 0 8px 14px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  max-width: 320px;
+}
+
+.btnPrimary:hover { filter: brightness(1.1); transform: translateY(-2px); }
+.btnPrimary:active { transform: translateY(5px); box-shadow: 0 0 0 #6a2c91; }
+
+.btnGreen {
+  background: linear-gradient(180deg, #4ade80 0%, #16a34a 100%);
+  color: #052d15;
+  box-shadow: 0 5px 0 #14532d, 0 8px 14px rgba(0, 0, 0, 0.3);
+  flex: 1;
+}
+
+.btnGreen:hover { filter: brightness(1.08); transform: translateY(-2px); }
+.btnGreen:active { transform: translateY(5px); box-shadow: 0 0 0 #14532d; }
+
+.btnGhost {
+  background: rgba(255, 255, 255, 0.07);
+  color: #c9b8e8;
+  border: 1px solid rgba(160, 68, 255, 0.3);
+  box-shadow: none;
+  flex: 1;
+}
+
+.btnGhost:hover { background: rgba(255, 255, 255, 0.12); }
+
+/* ── Lobby ────────────────────────────────────────────────────────── */
+.lobbySection {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.sectionTitle {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #a78bfa;
+  margin-bottom: -8px;
+}
+
+/* Room code display */
+.codeBox {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 2px solid rgba(160, 68, 255, 0.5);
+  border-radius: 12px;
+  padding: 12px 18px;
+}
+
+.codeText {
+  font-size: 2rem;
+  letter-spacing: 8px;
+  color: #fde68a;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  flex: 1;
+  text-align: center;
+}
+
+.copyBtn {
+  padding: 8px 14px;
+  background: linear-gradient(180deg, #a044ff 0%, #6a3093 100%);
+  border: 2px solid #4a2c7a;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.8rem;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: bold;
+  box-shadow: 0 3px 0 #3b1f52;
+  transition: all 0.1s;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.copyBtn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.copyBtn:active { transform: translateY(2px); box-shadow: 0 0 0 #3b1f52; }
+
+/* Players list */
+.playerList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.playerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.95rem;
+  transition: background 0.15s;
+}
+
+.playerSwatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.playerName {
+  flex: 1;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.hostBadge {
+  background: rgba(255, 215, 0, 0.15);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  color: #fde68a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.youBadge {
+  background: rgba(160, 68, 255, 0.18);
+  border: 1px solid rgba(160, 68, 255, 0.4);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  color: #d8b4fe;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Grid selector */
+.gridSection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gridRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gridChip {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  color: #d4c5f0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.gridChip:hover {
+  background: rgba(160, 68, 255, 0.15);
+  border-color: rgba(160, 68, 255, 0.5);
+}
+
+.gridChipActive {
+  background: linear-gradient(135deg, rgba(160, 68, 255, 0.35), rgba(106, 48, 147, 0.45));
+  border-color: #a044ff;
+  color: #e0d0ff;
+  box-shadow: 0 0 10px rgba(160, 68, 255, 0.3);
+}
+
+/* Custom grid inputs */
+.customRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.customInput {
+  width: 68px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 2px solid rgba(160, 68, 255, 0.4);
+  background: rgba(15, 5, 24, 0.85);
+  color: #fff;
+  font-family: inherit;
+  font-size: 1rem;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.customInput:focus {
+  outline: none;
+  border-color: #a044ff;
+  box-shadow: 0 0 10px rgba(160, 68, 255, 0.25);
+}
+
+.customSep {
+  color: #9a8abf;
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+.btnApply {
+  padding: 8px 16px;
+  background: linear-gradient(180deg, #a044ff 0%, #6a3093 100%);
+  border: 2px solid #4a2c7a;
+  border-radius: 8px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #3b1f52;
+  transition: all 0.1s;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.btnApply:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.btnApply:active { transform: translateY(2px); box-shadow: 0 0 0 #3b1f52; }
+
+/* Grid info for non-host */
+.gridInfoBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gridInfoText {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gridBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(160, 68, 255, 0.25), rgba(106, 48, 147, 0.3));
+  border: 1.5px solid rgba(160, 68, 255, 0.5);
+  border-radius: 8px;
+  padding: 6px 14px;
+  color: #e0d0ff;
+  font-weight: bold;
+}
+
+/* Waiting text */
+.waitingText {
+  text-align: center;
+  color: #b0a0cc;
+  font-size: 0.9rem;
+  animation: blink 1.4s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+/* Error */
+.errorText {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Action row */
+.actionRow {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+/* Divider */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(160, 68, 255, 0.4), transparent);
+}
+
+/* Spinner */
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #a044ff;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Connecting overlay */
+.connectingBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+}
+
+.connectingText {
+  color: #c084fc;
+  font-size: 1rem;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 24px 18px;
+    gap: 16px;
+  }
+
+  .gameTitle {
+    font-size: 1.8rem;
+  }
+
+  .codeText {
+    font-size: 1.6rem;
+    letter-spacing: 5px;
+  }
+
+  .gridChip {
+    padding: 7px 11px;
+    font-size: 0.78rem;
+  }
+}
