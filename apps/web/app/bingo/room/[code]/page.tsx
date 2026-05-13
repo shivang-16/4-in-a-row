@@ -325,14 +325,6 @@ export default function BingoRoomPage() {
           </div>
         </div>
 
-        {/* Info */}
-        <div className={styles.infoBox}>
-          <p>📝 Fill your own grid with numbers when game starts</p>
-          <p>🔄 Players take turns calling — the called number appears for all</p>
-          <p>✅ Tap your cell to mark the called number</p>
-          <p>🏆 First to complete 5 lines wins BINGO!</p>
-        </div>
-
         {/* Start button (host only) */}
         {isHost && (
           <button

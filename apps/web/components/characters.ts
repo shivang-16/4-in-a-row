@@ -45,7 +45,7 @@ export const GAME_CHARACTERS: Record<string, CharacterName> = {
   '4-in-a-row': 'rashu',
   'word-puzzle': 'tanya',
   'dots-and-boxes': 'simmu',
-  'bingo': 'tanya',
+  'bingo': 'rashu',
 };
 
 // Guide steps per game
