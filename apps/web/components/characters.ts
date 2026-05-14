@@ -46,6 +46,7 @@ export const GAME_CHARACTERS: Record<string, CharacterName> = {
   'word-puzzle': 'tanya',
   'dots-and-boxes': 'simmu',
   'bingo': 'rashu',
+  'sudoku': 'tanya',
 };
 
 // Guide steps per game
@@ -73,5 +74,11 @@ export const GAME_GUIDES: Record<string, string[]> = {
     "Your card is marked automatically when a called number matches one on your card.",
     "Complete a horizontal, vertical, or diagonal line of 5 numbers to win!",
     "The FREE space in the center counts for any line. First to BINGO wins! 🏆",
+  ],
+  'sudoku': [
+    "Welcome to Sudoku! 🔢 Fill the 9×9 grid so every row, column, and 3×3 box has 1–9.",
+    "Click a blank cell to select it, then tap a number or press a key to place it.",
+    "Wrong entries flash red — only correct placements count toward your progress.",
+    "Use up to 3 hints (💡) per game. Race to complete the board before your opponents! 🏆",
   ],
 };

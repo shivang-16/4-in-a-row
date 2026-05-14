@@ -11,6 +11,8 @@ import { dotsAndBoxesService } from '../services/dots-and-boxes.service';
 import { DABRoom, generateDABRoomCode, initDABGame, LineOwner } from '../types/dots-and-boxes';
 import { bingoService } from '../services/bingo.service';
 import { BingoRoom, generateBingoRoomCode } from '../types/bingo';
+import { sudokuService } from '../services/sudoku.service';
+import { SudokuRoom, SudokuDifficulty, generateSudokuRoomCode } from '../types/sudoku';
 
 export class WebSocketService {
   private io: SocketIOServer;
@@ -59,6 +61,12 @@ export class WebSocketService {
   private bingoQueue: { username: string; socket: Socket }[] = [];
   private bingoRematchVotes: Map<string, Set<string>> = new Map();
   private bingoRematchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+  // ── Sudoku state ─────────────────────────────────────────────────────────
+  private sudokuRooms: Map<string, SudokuRoom> = new Map();
+  private sudokuQueue: { username: string; socket: Socket; difficulty: SudokuDifficulty }[] = [];
+  private sudokuRematchVotes: Map<string, Set<string>> = new Map();
+  private sudokuRematchTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   constructor(httpServer: HTTPServer) {
     // Define allowed origins
@@ -1649,6 +1657,415 @@ export class WebSocketService {
         });
       });
 
+      // ══════════════════════════════════════════════════════════════════════
+      // SUDOKU
+      // ══════════════════════════════════════════════════════════════════════
+      const MAX_SUDOKU_PLAYERS = 8;
+
+      // ── Room: create ─────────────────────────────────────────────────────
+      socket.on('sudoku:room:create', (data: { username: string; difficulty?: SudokuDifficulty }) => {
+        const { username } = data;
+        const difficulty: SudokuDifficulty = data.difficulty ?? 'medium';
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+
+        const code = generateSudokuRoomCode();
+        const members = new Map<string, Socket>();
+        members.set(username, socket);
+
+        const room: SudokuRoom = {
+          code,
+          hostUsername: username,
+          members,
+          maxPlayers: MAX_SUDOKU_PLAYERS,
+          difficulty,
+          status: 'lobby',
+        };
+        this.sudokuRooms.set(code, room);
+        socket.data.sudokuRoomCode = code;
+        socket.join(`sudoku-lobby-${code}`);
+
+        socket.emit('sudoku:room:created', { roomCode: code, hostUsername: username, difficulty });
+        this.io.to(`sudoku-lobby-${code}`).emit('sudoku:room:lobbyUpdate', {
+          players: [username],
+          hostUsername: username,
+          maxPlayers: MAX_SUDOKU_PLAYERS,
+          difficulty,
+        });
+        console.log(`🔢 Sudoku room created: ${code} by ${username} (${difficulty})`);
+      });
+
+      // ── Room: host changes difficulty ─────────────────────────────────────
+      socket.on('sudoku:room:setDifficulty', (data: { difficulty: SudokuDifficulty }) => {
+        const code = socket.data.sudokuRoomCode as string | undefined;
+        if (!code) return;
+        const room = this.sudokuRooms.get(code);
+        if (!room || room.status !== 'lobby') return;
+        if (room.hostUsername !== socket.data.username) return;
+
+        const allowed: SudokuDifficulty[] = ['easy', 'medium', 'hard'];
+        if (!allowed.includes(data.difficulty)) return;
+        room.difficulty = data.difficulty;
+
+        this.io.to(`sudoku-lobby-${code}`).emit('sudoku:room:lobbyUpdate', {
+          players: [...room.members.keys()],
+          hostUsername: room.hostUsername,
+          maxPlayers: room.maxPlayers,
+          difficulty: room.difficulty,
+        });
+      });
+
+      // ── Room: join ────────────────────────────────────────────────────────
+      socket.on('sudoku:room:join', (data: { username: string; roomCode: string }) => {
+        const { username, roomCode } = data;
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+        const code = roomCode.toUpperCase().trim();
+        const room = this.sudokuRooms.get(code);
+
+        if (!room) {
+          socket.emit('sudoku:room:error', { message: 'Room not found. Check the code and try again.' });
+          return;
+        }
+        if (room.status !== 'lobby') {
+          socket.emit('sudoku:room:error', { message: 'This game has already started.' });
+          return;
+        }
+        if (room.members.size >= MAX_SUDOKU_PLAYERS) {
+          socket.emit('sudoku:room:error', { message: 'This room is full (max 8 players).' });
+          return;
+        }
+
+        if (room.members.has(username)) {
+          room.members.set(username, socket);
+          socket.data.sudokuRoomCode = code;
+          socket.join(`sudoku-lobby-${code}`);
+          socket.emit('sudoku:room:joinPending', {
+            roomCode: code,
+            players: [...room.members.keys()],
+            hostUsername: room.hostUsername,
+            maxPlayers: MAX_SUDOKU_PLAYERS,
+            difficulty: room.difficulty,
+          });
+          return;
+        }
+
+        room.members.set(username, socket);
+        socket.data.sudokuRoomCode = code;
+        socket.join(`sudoku-lobby-${code}`);
+
+        const playerList = [...room.members.keys()];
+        this.io.to(`sudoku-lobby-${code}`).emit('sudoku:room:lobbyUpdate', {
+          players: playerList,
+          hostUsername: room.hostUsername,
+          maxPlayers: MAX_SUDOKU_PLAYERS,
+          difficulty: room.difficulty,
+        });
+        socket.emit('sudoku:room:joinPending', {
+          roomCode: code,
+          players: playerList,
+          hostUsername: room.hostUsername,
+          maxPlayers: MAX_SUDOKU_PLAYERS,
+          difficulty: room.difficulty,
+        });
+        console.log(`🔢 ${username} joined Sudoku room ${code}`);
+      });
+
+      // ── Room: leave ───────────────────────────────────────────────────────
+      socket.on('sudoku:room:leave', () => {
+        this.handleSudokuRoomLeave(socket);
+      });
+
+      // ── Host starts game ──────────────────────────────────────────────────
+      socket.on('sudoku:room:start', () => {
+        const code = socket.data.sudokuRoomCode as string | undefined;
+        if (!code) return;
+        const room = this.sudokuRooms.get(code);
+        if (!room) return;
+
+        if (room.hostUsername !== socket.data.username) {
+          socket.emit('sudoku:room:error', { message: 'Only the host can start the game.' });
+          return;
+        }
+        if (room.members.size < 2) {
+          socket.emit('sudoku:room:error', { message: 'Need at least 2 players to start.' });
+          return;
+        }
+
+        const playerList = [...room.members.keys()];
+        this.startSudokuGame(room, playerList, false);
+        console.log(`🔢 Sudoku room ${code} game started: ${playerList.join(', ')}`);
+      });
+
+      // ── Quick match ───────────────────────────────────────────────────────
+      socket.on('sudoku:queue:join', (data: { username: string; difficulty?: SudokuDifficulty }) => {
+        const { username } = data;
+        const difficulty: SudokuDifficulty = data.difficulty ?? 'medium';
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+        this.sudokuQueue = this.sudokuQueue.filter((e) => e.username !== username);
+        this.sudokuQueue.push({ username, socket, difficulty });
+        socket.emit('sudoku:queue:queued', { position: this.sudokuQueue.length });
+
+        if (this.sudokuQueue.length >= 2) {
+          const pair = this.sudokuQueue.splice(0, 2);
+          const code = generateSudokuRoomCode();
+          const members = new Map<string, Socket>();
+          for (const p of pair) members.set(p.username, p.socket);
+          const room: SudokuRoom = {
+            code,
+            hostUsername: pair[0]!.username,
+            members,
+            maxPlayers: 2,
+            difficulty: pair[0]!.difficulty,
+            status: 'lobby',
+          };
+          this.sudokuRooms.set(code, room);
+          this.startSudokuGame(room, pair.map((p) => p.username), false);
+        }
+      });
+
+      socket.on('sudoku:queue:leave', () => {
+        const username = socket.data.username as string;
+        if (username) this.sudokuQueue = this.sudokuQueue.filter((e) => e.username !== username);
+      });
+
+      // ── Bot game ──────────────────────────────────────────────────────────
+      socket.on('sudoku:bot:start', (data: { username: string; difficulty?: SudokuDifficulty }) => {
+        const { username } = data;
+        const difficulty: SudokuDifficulty = data.difficulty ?? 'medium';
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+
+        const adjectives = ['Swift', 'Clever', 'Mighty', 'Shadow', 'Golden', 'Crystal', 'Thunder', 'Lunar'];
+        const nouns = ['Solver', 'Master', 'Genius', 'Ninja', 'Wizard', 'Champion', 'Logic', 'Brain'];
+        const botName = `🤖 ${adjectives[Math.floor(Math.random() * adjectives.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}`;
+
+        const code = generateSudokuRoomCode();
+        const members = new Map<string, Socket>();
+        members.set(username, socket);
+
+        const room: SudokuRoom = {
+          code,
+          hostUsername: username,
+          members,
+          maxPlayers: 2,
+          difficulty,
+          status: 'lobby',
+        };
+        this.sudokuRooms.set(code, room);
+        this.startSudokuGame(room, [username, botName], true, botName);
+        console.log(`🔢 Sudoku bot game: ${username} vs ${botName} (${difficulty})`);
+      });
+
+      // ── Player places a digit ─────────────────────────────────────────────
+      socket.on('sudoku:place', (data: { gameId: string; row: number; col: number; digit: number }) => {
+        const username = socket.data.username as string;
+        const { gameId, row, col, digit } = data;
+        if (!username || !gameId) return;
+
+        const result = sudokuService.placeDigit(gameId, username, row, col, digit);
+        if (!result.success) {
+          socket.emit('sudoku:error', { message: result.error });
+          return;
+        }
+
+        const game = sudokuService.getGame(gameId);
+        if (!game) return;
+        const room = [...this.sudokuRooms.values()].find((r) => r.gameId === gameId);
+
+        // Broadcast the move to all players (so they can see progress bars)
+        this.io.to(`sudoku-game-${gameId}`).emit('sudoku:placed', {
+          gameId,
+          username,
+          row,
+          col,
+          digit,
+          correct: result.correct,
+          players: game.players.map((p) => ({
+            username: p.username,
+            colorIndex: p.colorIndex,
+            filledCount: p.filledCount,
+            rank: p.rank,
+            hintsUsed: p.hintsUsed,
+          })),
+        });
+
+        if (result.completed) {
+          this.io.to(`sudoku-game-${gameId}`).emit('sudoku:player:completed', {
+            gameId,
+            username,
+            rank: game.rankings.find((r) => r.username === username)?.rank,
+            rankings: game.rankings,
+          });
+        }
+
+        if (result.gameOver && room) {
+          room.status = 'ended';
+          this.io.to(`sudoku-game-${gameId}`).emit('sudoku:game:ended', {
+            gameId,
+            winner: result.winner,
+            rankings: result.rankings,
+          });
+          this.sudokuRematchVotes.set(gameId, new Set());
+          setTimeout(() => sudokuService.deleteGame(gameId), 120000);
+        }
+      });
+
+      // ── Hint request ──────────────────────────────────────────────────────
+      socket.on('sudoku:hint', (data: { gameId: string }) => {
+        const username = socket.data.username as string;
+        const { gameId } = data;
+        if (!username || !gameId) return;
+
+        const result = sudokuService.getHint(gameId, username);
+        if (!result.success) {
+          socket.emit('sudoku:error', { message: result.error });
+          return;
+        }
+
+        const game = sudokuService.getGame(gameId);
+        if (!game) return;
+        const room = [...this.sudokuRooms.values()].find((r) => r.gameId === gameId);
+
+        // Send hint only to the requesting player
+        socket.emit('sudoku:hint:given', {
+          gameId,
+          row: result.row,
+          col: result.col,
+          value: result.value,
+          hintsUsed: result.hintsUsed,
+        });
+
+        // Broadcast updated progress
+        this.io.to(`sudoku-game-${gameId}`).emit('sudoku:placed', {
+          gameId,
+          username,
+          row: result.row,
+          col: result.col,
+          digit: result.value,
+          correct: true,
+          players: game.players.map((p) => ({
+            username: p.username,
+            colorIndex: p.colorIndex,
+            filledCount: p.filledCount,
+            rank: p.rank,
+            hintsUsed: p.hintsUsed,
+          })),
+        });
+
+        // Check completion after hint
+        const player = game.players.find((p) => p.username === username);
+        const totalBlanks = 81 - game.givenCount;
+        if (player && player.filledCount === totalBlanks && player.rank !== null) {
+          this.io.to(`sudoku-game-${gameId}`).emit('sudoku:player:completed', {
+            gameId,
+            username,
+            rank: player.rank,
+            rankings: game.rankings,
+          });
+        }
+
+        if (game.status === 'completed' && room) {
+          room.status = 'ended';
+          this.io.to(`sudoku-game-${gameId}`).emit('sudoku:game:ended', {
+            gameId,
+            winner: game.winner,
+            rankings: game.rankings,
+          });
+          this.sudokuRematchVotes.set(gameId, new Set());
+          setTimeout(() => sudokuService.deleteGame(gameId), 120000);
+        }
+      });
+
+      // ── Rejoin ────────────────────────────────────────────────────────────
+      socket.on('sudoku:rejoin', (data: { gameId: string; username: string }) => {
+        const { gameId, username } = data;
+        if (!gameId || !username) return;
+        socket.data.username = username;
+        this.connectedPlayers.set(username, socket);
+
+        const room = [...this.sudokuRooms.values()].find((r) => r.gameId === gameId);
+        if (!room) return;
+
+        room.members.set(username, socket);
+        socket.data.sudokuGameId = gameId;
+        socket.data.sudokuRoomCode = room.code;
+        socket.join(`sudoku-game-${gameId}`);
+
+        const game = sudokuService.getGame(gameId);
+        if (game) {
+          const myGrid = sudokuService.getPlayerGrid(gameId, username);
+          const myPlayer = game.players.find((p) => p.username === username);
+          socket.emit('sudoku:rejoined', {
+            gameId,
+            puzzle: game.puzzle,
+            playerGrid: myGrid,
+            difficulty: game.difficulty,
+            players: game.players.map((p) => ({
+              username: p.username,
+              colorIndex: p.colorIndex,
+              filledCount: p.filledCount,
+              rank: p.rank,
+              hintsUsed: p.hintsUsed,
+            })),
+            status: game.status,
+            winner: game.winner,
+            rankings: game.rankings,
+            hintsUsed: myPlayer?.hintsUsed ?? 0,
+          });
+        }
+      });
+
+      // ── Chat ──────────────────────────────────────────────────────────────
+      socket.on('sudoku:chat', (data: { gameId: string; message: string }) => {
+        const username = socket.data.username as string;
+        const { gameId, message } = data;
+        if (!username || !gameId || !message?.trim()) return;
+
+        this.io.to(`sudoku-game-${gameId}`).emit('sudoku:chat:message', {
+          username,
+          message: message.trim().slice(0, 200),
+          timestamp: Date.now(),
+        });
+      });
+
+      // ── Rematch vote ──────────────────────────────────────────────────────
+      socket.on('sudoku:rematch:vote', (data: { gameId: string }) => {
+        const username = socket.data.username as string;
+        const { gameId } = data;
+        if (!username || !gameId) return;
+
+        const room = [...this.sudokuRooms.values()].find((r) => r.gameId === gameId);
+        if (!room || room.status !== 'ended') return;
+
+        let votes = this.sudokuRematchVotes.get(gameId);
+        if (!votes) { votes = new Set(); this.sudokuRematchVotes.set(gameId, votes); }
+        votes.add(username);
+
+        const game = sudokuService.getGame(gameId);
+        const isBotGame = game?.isBot ?? false;
+        const humanPlayers = (game?.players ?? []).filter((p) => !p.isBot).map((p) => p.username);
+        const activePlayers = humanPlayers.filter((u) => this.connectedPlayers.get(u)?.connected);
+        const needed = isBotGame ? 1 : activePlayers.length;
+
+        for (const u of activePlayers) {
+          this.connectedPlayers.get(u)?.emit('sudoku:rematch:progress', {
+            gameId, votes: votes.size, needed,
+          });
+        }
+
+        if (!this.sudokuRematchTimers.has(gameId)) {
+          const timer = setTimeout(() => this.startSudokuRematch(gameId), 30000);
+          this.sudokuRematchTimers.set(gameId, timer);
+        }
+        if (votes.size >= needed) {
+          this.startSudokuRematch(gameId);
+        }
+      });
+
+      // ── END SUDOKU ════════════════════════════════════════════════════════
+
       // ── Rematch vote ─────────────────────────────────────────────────────
       socket.on('bingo:rematch:vote', (data: { gameId: string }) => {
         const username = socket.data.username as string;
@@ -2219,6 +2636,175 @@ export class WebSocketService {
     room.status = 'lobby';
     this.startBingoGame(room, allParticipants, isBotGame, isBotGame ? botUsername : undefined);
     console.log(`🔁 Bingo rematch started: ${allParticipants.join(', ')}`);
+  }
+
+  // ── Sudoku helpers ────────────────────────────────────────────────────────
+
+  private startSudokuGame(room: SudokuRoom, playerList: string[], withBot: boolean, botUsername?: string) {
+    const code = room.code;
+    const playerData = playerList.map((u) => ({ username: u, isBot: u === botUsername }));
+    const game = sudokuService.createGame(playerData, room.difficulty);
+
+    room.status = 'playing';
+    room.gameId = game.id;
+    room.gameState = game;
+
+    const humanPlayers = playerList.filter((u) => u !== botUsername);
+
+    for (const username of humanPlayers) {
+      const s = room.members.get(username);
+      if (!s) continue;
+      s.data.sudokuRoomCode = code;
+      s.data.sudokuGameId = game.id;
+      s.join(`sudoku-game-${game.id}`);
+      s.leave(`sudoku-lobby-${code}`);
+    }
+
+    // If bot game, let bot "solve" after a difficulty-based delay
+    if (withBot && botUsername) {
+      const delayMs = { easy: 90000, medium: 120000, hard: 150000 }[room.difficulty] ?? 120000;
+      // Add some randomness so bot doesn't always finish at exact same time
+      const jitter = Math.floor(Math.random() * 30000);
+      setTimeout(() => this.doBotSolve(game.id, botUsername), delayMs - jitter);
+    }
+
+    for (const username of humanPlayers) {
+      const s = room.members.get(username);
+      if (!s) continue;
+      const myPlayer = game.players.find((p) => p.username === username)!;
+      s.emit('sudoku:game:started', {
+        gameId: game.id,
+        puzzle: game.puzzle,
+        difficulty: game.difficulty,
+        players: game.players.map((p) => ({
+          username: p.username,
+          colorIndex: p.colorIndex,
+          filledCount: p.filledCount,
+          rank: p.rank,
+          hintsUsed: p.hintsUsed,
+        })),
+        yourUsername: username,
+        yourColorIndex: myPlayer.colorIndex,
+        isBot: withBot,
+        botUsername: botUsername ?? null,
+      });
+    }
+    console.log(`🔢 Sudoku game started: ${game.id} — ${playerList.join(', ')} (${room.difficulty})`);
+  }
+
+  private doBotSolve(gameId: string, botUsername: string) {
+    const game = sudokuService.getGame(gameId);
+    if (!game || game.status !== 'playing') return;
+
+    sudokuService.botComplete(gameId, botUsername);
+
+    // Assign rank to bot if not already ranked
+    const bot = game.players.find((p) => p.username === botUsername);
+    if (bot && bot.rank === null) {
+      const rank = game.rankings.length + 1;
+      bot.rank = rank;
+      bot.completedAt = Date.now();
+      game.rankings.push({ username: botUsername, rank, completedAt: bot.completedAt, hintsUsed: 0 });
+      if (!game.winner) game.winner = botUsername;
+    }
+
+    const room = [...this.sudokuRooms.values()].find((r) => r.gameId === gameId);
+
+    this.io.to(`sudoku-game-${gameId}`).emit('sudoku:player:completed', {
+      gameId,
+      username: botUsername,
+      rank: bot!.rank,
+      rankings: game.rankings,
+    });
+
+    // Check if all humans already done
+    const humansDone = game.players.filter((p) => !p.isBot).every((p) => p.rank !== null);
+    if (humansDone && game.status === 'playing') {
+      let remaining = game.rankings.length + 1;
+      for (const p of game.players) {
+        if (p.rank === null) {
+          p.rank = remaining++;
+          game.rankings.push({ username: p.username, rank: p.rank, completedAt: null, hintsUsed: p.hintsUsed });
+        }
+      }
+      game.status = 'completed';
+      game.endedAt = new Date();
+    }
+
+    if (game.status === 'completed' && room) {
+      room.status = 'ended';
+      this.io.to(`sudoku-game-${gameId}`).emit('sudoku:game:ended', {
+        gameId,
+        winner: game.winner,
+        rankings: game.rankings,
+      });
+      this.sudokuRematchVotes.set(gameId, new Set());
+      setTimeout(() => sudokuService.deleteGame(gameId), 120000);
+    }
+  }
+
+  private startSudokuRematch(gameId: string) {
+    const room = [...this.sudokuRooms.values()].find((r) => r.gameId === gameId);
+    if (!room) return;
+
+    const oldGame = sudokuService.getGame(gameId);
+    const isBotGame = oldGame?.isBot ?? false;
+    const botUsername = oldGame?.botUsername;
+    const difficulty = oldGame?.difficulty ?? 'medium';
+
+    const votes = this.sudokuRematchVotes.get(gameId);
+    const timer = this.sudokuRematchTimers.get(gameId);
+    if (timer) clearTimeout(timer);
+    this.sudokuRematchTimers.delete(gameId);
+    this.sudokuRematchVotes.delete(gameId);
+
+    const humanParticipants = (votes ? [...votes] : []).filter(
+      (u) => this.connectedPlayers.get(u)?.connected
+    );
+    const minNeeded = isBotGame ? 1 : 2;
+    if (humanParticipants.length < minNeeded) {
+      for (const u of humanParticipants) {
+        this.connectedPlayers.get(u)?.emit('sudoku:rematch:error', { message: 'Not enough players for rematch.' });
+      }
+      return;
+    }
+
+    const allParticipants = isBotGame && botUsername
+      ? [...humanParticipants, botUsername]
+      : humanParticipants;
+
+    room.members = new Map(humanParticipants.map((u) => [u, this.connectedPlayers.get(u)!]));
+    room.hostUsername = humanParticipants[0]!;
+    room.difficulty = difficulty;
+    room.status = 'lobby';
+    this.startSudokuGame(room, allParticipants, isBotGame, isBotGame ? botUsername : undefined);
+    console.log(`🔁 Sudoku rematch started: ${allParticipants.join(', ')}`);
+  }
+
+  private handleSudokuRoomLeave(socket: Socket) {
+    const code = socket.data.sudokuRoomCode as string | undefined;
+    if (!code) return;
+    const room = this.sudokuRooms.get(code);
+    if (!room) return;
+
+    const username = socket.data.username as string;
+    room.members.delete(username);
+    socket.leave(`sudoku-lobby-${code}`);
+    socket.data.sudokuRoomCode = null;
+
+    if (room.members.size === 0) {
+      this.sudokuRooms.delete(code);
+      return;
+    }
+    if (room.hostUsername === username) {
+      room.hostUsername = [...room.members.keys()][0]!;
+    }
+    this.io.to(`sudoku-lobby-${code}`).emit('sudoku:room:lobbyUpdate', {
+      players: [...room.members.keys()],
+      hostUsername: room.hostUsername,
+      maxPlayers: room.maxPlayers,
+      difficulty: room.difficulty,
+    });
   }
 
   private handleBingoRoomLeave(socket: Socket) {

@@ -49,6 +49,17 @@ const GAMES = [
     tags: ['1-8 Players', 'Luck', 'VS Bot'],
     players: '1-8',
   },
+  {
+    href: '/sudoku',
+    title: 'Sudoku',
+    icon: '🔢',
+    accent: '#c8972a',
+    glow: 'rgba(200,151,42,0.3)',
+    gradient: 'linear-gradient(135deg, #c8972a 0%, #8a6018 100%)',
+    description: 'Fill the 9×9 grid — every row, column and box must have 1–9. Race friends or challenge the bot.',
+    tags: ['1-8 Players', 'Logic', 'VS Bot'],
+    players: '1-8',
+  },
 ];
 
 export default function HubPage() {
