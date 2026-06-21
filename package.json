@@ -4,6 +4,12 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "dev:hub": "pnpm dev --filter=web",
+    "dev:4-in-a-row": "pnpm dev --filter=web-4-in-a-row",
+    "dev:word-puzzle": "pnpm dev --filter=web-word-puzzle",
+    "dev:dots-and-boxes": "pnpm dev --filter=web-dots-and-boxes",
+    "dev:bingo": "pnpm dev --filter=web-bingo",
+    "dev:sudoku": "pnpm dev --filter=web-sudoku",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"
