@@ -7,33 +7,28 @@ import {
 import { useRouter } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import {
-  Users, Trophy, Home as HomeIcon, Rocket,
-  Phone, PhoneOff, Mic, MicOff, MessageSquare, Volume2, BookOpen, X,
+  Users, Trophy, Home as HomeIcon, Rocket, Zap, Target, Puzzle,
+  Phone, PhoneOff, Mic, MicOff, MessageSquare, Volume2, BookOpen, X, Timer, Swords,
 } from 'lucide-react';
 import styles from './word-puzzle.module.css';
-import GameGuide from '@repo/game-ui/GameGuide';
-import WinCelebration from '@repo/game-ui/WinCelebration';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
 
-// ── Player colours (8 slots, keep in sync with backend PLAYER_COLORS) ────────
 const PLAYER_COLORS = [
-  '#f87171', '#60a5fa', '#4ade80', '#fbbf24',
-  '#a78bfa', '#f472b6', '#34d399', '#fb923c',
+  '#6c5ce7', '#4ecdc4', '#20bf6b', '#fd9644',
+  '#e056a0', '#f87171', '#a78bfa', '#fb923c',
 ];
 
-// ── Types (mirror backend) ─────────────────────────────────────────────────
 interface WPCell  { row: number; col: number }
 interface WPWord  { id: string; word: string; cells: WPCell[]; claimedBy: string | null; claimedAt: number | null }
 interface WPPlayer { username: string; score: number; colorIndex: number }
 
-type GamePhase = 'menu' | 'matchmaking' | 'solo-setup' | 'playing' | 'ended';
+type GamePhase = 'landing' | 'menu' | 'matchmaking' | 'solo-setup' | 'playing' | 'ended';
 
-// ── Difficulty levels (mirrors lobby page) ────────────────────────────────
 const DIFFICULTIES = [
-  { id: 'easy',   label: 'Easy',   emoji: '🟢', wordCount: 8,  gridLabel: '12×12', desc: 'Short & sweet'       },
-  { id: 'medium', label: 'Medium', emoji: '🟡', wordCount: 14, gridLabel: '17×17', desc: 'Balanced challenge'  },
-  { id: 'hard',   label: 'Hard',   emoji: '🔴', wordCount: 20, gridLabel: '22×22', desc: 'Large board, hard!'  },
+  { id: 'easy',   label: 'Easy',   wordCount: 8,  gridLabel: '12×12', desc: 'Short & sweet'       },
+  { id: 'medium', label: 'Medium', wordCount: 14, gridLabel: '17×17', desc: 'Balanced challenge'  },
+  { id: 'hard',   label: 'Hard',   wordCount: 20, gridLabel: '22×22', desc: 'Large board, hard!'  },
 ] as const;
 
 type Difficulty = typeof DIFFICULTIES[number]['id'];
@@ -41,15 +36,13 @@ type Difficulty = typeof DIFFICULTIES[number]['id'];
 export default function WordPuzzlePage() {
   const router = useRouter();
 
-  // ── Auth / username ─────────────────────────────────────────────────────
   const [username, setUsername]         = useState('');
   const [nameInput, setNameInput]       = useState('');
-  const [nameLocked, setNameLocked]     = useState(false); // true once confirmed for this session
+  const [nameLocked, setNameLocked]     = useState(false);
   const [nameShake, setNameShake]       = useState(false);
   const [socket, setSocket]             = useState<Socket | null>(null);
-  const [phase, setPhase]               = useState<GamePhase>('menu');
+  const [phase, setPhase]               = useState<GamePhase>('landing');
 
-  // ── Word pronunciation & definition ─────────────────────────────────────
   const [definitionPopup, setDefinitionPopup] = useState<{ wordId: string; meaning: string; loading: boolean } | null>(null);
 
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
@@ -79,7 +72,6 @@ export default function WordPuzzlePage() {
   }, []);
 
   const handleShowDefinition = useCallback(async (wordId: string, word: string) => {
-    // Toggle off if already open for this word
     if (definitionPopup?.wordId === wordId) {
       setDefinitionPopup(null);
       return;
@@ -104,20 +96,17 @@ export default function WordPuzzlePage() {
     }
   }, [definitionPopup]);
 
-  // ── Lobby / matchmaking ─────────────────────────────────────────────────
   const [friendRoomCode, setFriendRoomCode] = useState('');
   const [roomError, setRoomError]           = useState('');
   const [mmStatus, setMmStatus]             = useState('Looking for players…');
   const [menuDifficulty, setMenuDifficulty] = useState<Difficulty>('medium');
   const [needReconnect, setNeedReconnect]   = useState<string | null>(null);
 
-  // ── Solo mode state ──────────────────────────────────────────────────────
   const [isSolo, setIsSolo]                   = useState(false);
   const [soloDifficulty, setSoloDifficulty]   = useState<Difficulty>('medium');
-  const [soloElapsed, setSoloElapsed]         = useState(0);   // seconds
+  const [soloElapsed, setSoloElapsed]         = useState(0);
   const soloTimerRef                          = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Game state ──────────────────────────────────────────────────────────
   const [gameId, setGameId]             = useState<string | null>(null);
   const [board, setBoard]               = useState<string[][]>([]);
   const [gridSize, setGridSize]         = useState(15);
@@ -125,29 +114,24 @@ export default function WordPuzzlePage() {
   const [players, setPlayers]           = useState<WPPlayer[]>([]);
   const [myColorIndex, setMyColorIndex] = useState(0);
   const [endResult, setEndResult]       = useState<WPPlayer[] | null>(null);
-  const [showGuide, setShowGuide]       = useState(false);
-  const [showCelebration, setShowCelebration] = useState(false);
-  const celebrationShownRef = useRef(false);
+  const [revealedCells, setRevealedCells] = useState(0);
 
-  // ── Rematch state ──────────────────────────────────────────────────────
   const [rematchWaiting, setRematchWaiting] = useState(false);
   const [rematchVotes, setRematchVotes]     = useState(0);
   const [rematchNeeded, setRematchNeeded]   = useState(0);
   const [rematchError, setRematchError]     = useState<string | null>(null);
 
-  // ── Selection state ─────────────────────────────────────────────────────
   const [selStart, setSelStart]         = useState<WPCell | null>(null);
   const [selEnd, setSelEnd]             = useState<WPCell | null>(null);
   const [lastClaim, setLastClaim]       = useState<{ word: string; correct: boolean } | null>(null);
+  const [shakeCells, setShakeCells]     = useState<Set<string>>(new Set());
 
-  // ── Chat state ───────────────────────────────────────────────────────────
   const [chatMessages, setChatMessages] = useState<Array<{ username: string; message: string; ts: Date }>>([]);
   const [chatInput, setChatInput]       = useState('');
   const [chatOpen, setChatOpen]         = useState(false);
   const [unreadCount, setUnreadCount]   = useState(0);
   const chatOpenRef                     = useRef(chatOpen);
 
-  // ── Call state ───────────────────────────────────────────────────────────
   const [callRoomActive, setCallRoomActive]         = useState(false);
   const [callRoomInitiator, setCallRoomInitiator]   = useState<string | null>(null);
   const [callMembers, setCallMembers]               = useState<string[]>([]);
@@ -167,11 +151,10 @@ export default function WordPuzzlePage() {
   const boardRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
   const pendingReconnectRef = useRef<{ gameId: string; username: string } | null>(null);
+  const lastClaimedPathRef = useRef<Set<string>>(new Set());
 
-  // Keep chatOpenRef in sync
   useEffect(() => { chatOpenRef.current = chatOpen; }, [chatOpen]);
 
-  // ── Restore pending game from sessionStorage (set by room lobby) ────────
   useEffect(() => {
     const pending = sessionStorage.getItem('wp_pendingGame');
     if (pending) {
@@ -182,7 +165,6 @@ export default function WordPuzzlePage() {
       setNameInput(uname);
       setNameLocked(true);
       initGame(data, uname);
-      // Store gameId so connectSocket can rejoin the room on connect
       pendingReconnectRef.current = { gameId: data.gameId, username: uname };
       setNeedReconnect(uname);
     }
@@ -198,7 +180,6 @@ export default function WordPuzzlePage() {
 
     sock.on('connect', () => {
       sock.emit('player:join', { username: uname });
-      // If coming from room lobby, rejoin the game room for chat/call
       const pr = pendingReconnectRef.current;
       if (pr) {
         sock.emit('wp:game:reconnect', { gameId: pr.gameId, username: pr.username });
@@ -206,17 +187,14 @@ export default function WordPuzzlePage() {
       }
     });
 
-    // Matchmaking
     sock.on('wp:matchmaking:queued', (data: { position: number }) => {
       setMmStatus(`In queue (position ${data.position}) — waiting for opponent…`);
     });
 
-    // Game started (via matchmaking or reconnect)
     sock.on('wp:game:started', (data: any) => {
       initGame(data, uname);
     });
 
-    // Word claimed by any player
     sock.on('wp:game:wordClaimed', (data: {
       wordId: string; word: string; claimedBy: string; colorIndex: number; cells: WPCell[];
       players: WPPlayer[];
@@ -225,7 +203,6 @@ export default function WordPuzzlePage() {
         w.id === data.wordId ? { ...w, claimedBy: data.claimedBy } : w
       ));
       setPlayers(data.players);
-
       if (data.claimedBy === uname) {
         setLastClaim({ word: data.word ?? '?', correct: true });
         setTimeout(() => setLastClaim(null), 1500);
@@ -233,11 +210,10 @@ export default function WordPuzzlePage() {
     });
 
     sock.on('wp:game:claimFailed', () => {
-      setLastClaim({ word: '', correct: false });
-      setTimeout(() => setLastClaim(null), 1000);
+      setShakeCells(new Set(lastClaimedPathRef.current));
+      setTimeout(() => setShakeCells(new Set()), 500);
     });
 
-    // Game ended
     sock.on('wp:game:ended', (data: { gameId?: string; players: WPPlayer[]; winner: string | null; words?: WPWord[] }) => {
       if (data.words) setWords(data.words);
       setPlayers(data.players);
@@ -247,25 +223,18 @@ export default function WordPuzzlePage() {
       setRematchVotes(0);
       setRematchNeeded(0);
       setRematchError(null);
-      if (!celebrationShownRef.current) {
-        celebrationShownRef.current = true;
-        setTimeout(() => setShowCelebration(true), 800);
-      }
     });
 
-    // Rematch progress
     sock.on('wp:rematch:progress', (data: { votes: number; needed: number; voted: string[] }) => {
       setRematchVotes(data.votes);
       setRematchNeeded(data.needed);
     });
 
-    // Rematch error
     sock.on('wp:rematch:error', (data: { message: string }) => {
       setRematchError(data.message);
       setRematchWaiting(false);
     });
 
-    // Room events (forwarded here when game starts from lobby)
     sock.on('wp:room:error', (data: { message: string }) => {
       setRoomError(data.message);
     });
@@ -274,7 +243,6 @@ export default function WordPuzzlePage() {
       initGame(data, uname);
     });
 
-    // Chat
     sock.on('chat:message', (data: { username: string; message: string }) => {
       setChatMessages((prev) => [...prev, { ...data, ts: new Date() }]);
       if (!chatOpenRef.current && data.username !== uname) {
@@ -282,7 +250,6 @@ export default function WordPuzzlePage() {
       }
     });
 
-    // ── Call signaling ────────────────────────────────────────────────────
     sock.on('call:ringing', (data: { from: string; gameId: string }) => {
       setCallRoomActive(true);
       setCallRoomInitiator(data.from);
@@ -356,7 +323,6 @@ export default function WordPuzzlePage() {
     return sock;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-connect socket when navigating from room lobby with a pending game
   useEffect(() => {
     if (needReconnect) {
       connectSocket(needReconnect);
@@ -377,11 +343,7 @@ export default function WordPuzzlePage() {
     setRematchVotes(0);
     setRematchNeeded(0);
     setRematchError(null);
-    celebrationShownRef.current = false;
     setPhase('playing');
-    if (!sessionStorage.getItem('guide_word-puzzle')) {
-      setShowGuide(true);
-    }
     if (solo || data.players.length === 1) {
       setIsSolo(true);
       setSoloElapsed(0);
@@ -539,7 +501,7 @@ export default function WordPuzzlePage() {
     setChatInput('');
   }, [chatInput, socket, gameId, username]);
 
-  // ── Menu: set username & play ───────────────────────────────────────────
+  // ── Menu helpers ─────────────────────────────────────────────────────────
   const triggerNameShake = useCallback(() => {
     setNameShake(true);
     setTimeout(() => setNameShake(false), 600);
@@ -553,7 +515,6 @@ export default function WordPuzzlePage() {
     setNameLocked(true);
   }, []);
 
-  // ── Solo mode helpers ────────────────────────────────────────────────────
   const fmtTime = (secs: number) => {
     const m = Math.floor(secs / 60);
     const s = secs % 60;
@@ -579,12 +540,29 @@ export default function WordPuzzlePage() {
     sock.emit('wp:solo:start', { username, wordCount: wc });
   }, [username, connectSocket, soloDifficulty]);
 
-  // Stop timer when game ends
   useEffect(() => {
     if (phase === 'ended') stopSoloTimer();
   }, [phase, stopSoloTimer]);
 
-  // ── Matchmaking ─────────────────────────────────────────────────────────
+  // Typewriter reveal effect when board loads
+  useEffect(() => {
+    if (board.length === 0) { setRevealedCells(0); return; }
+    const totalCells = board.length * (board[0]?.length ?? 0);
+    setRevealedCells(0);
+    let count = 0;
+    const batchSize = Math.max(3, Math.floor(totalCells / 40));
+    const interval = setInterval(() => {
+      count += batchSize;
+      if (count >= totalCells) {
+        setRevealedCells(totalCells);
+        clearInterval(interval);
+      } else {
+        setRevealedCells(count);
+      }
+    }, 30);
+    return () => clearInterval(interval);
+  }, [board]);
+
   const handleFindPlayer = useCallback(() => {
     if (!username) return;
     const sock = connectSocket(username);
@@ -599,7 +577,6 @@ export default function WordPuzzlePage() {
     setPhase('menu');
   }, [socket]);
 
-  // ── Create / join room ──────────────────────────────────────────────────
   const handleCreateRoom = useCallback(() => {
     if (!username) return;
     sessionStorage.setItem('4inarow_username', username);
@@ -613,7 +590,6 @@ export default function WordPuzzlePage() {
   }, [username, friendRoomCode, router]);
 
   // ── Board interaction ───────────────────────────────────────────────────
-  /** Build cell path between two cells if they are co-linear */
   function buildPath(start: WPCell, end: WPCell): WPCell[] | null {
     const dr = end.row - start.row;
     const dc = end.col - start.col;
@@ -631,12 +607,9 @@ export default function WordPuzzlePage() {
   const selectionPath = selStart && selEnd ? buildPath(selStart, selEnd) : null;
   const selectionSet  = new Set(selectionPath?.map((c) => `${c.row},${c.col}`) ?? []);
 
-  // Use a ref so pointer handlers always see current selStart without stale closure
   const selStartRef = useRef<WPCell | null>(null);
-  // Mirror selEnd into a ref so onBoardPointerUp always reads the latest end cell
   const selEndRef   = useRef<WPCell | null>(null);
 
-  /** Read the cell coordinates from the element under the pointer */
   function cellFromPoint(clientX: number, clientY: number): WPCell | null {
     const el = document.elementFromPoint(clientX, clientY);
     const cellEl = el instanceof Element ? el.closest('[data-row]') : null;
@@ -647,11 +620,9 @@ export default function WordPuzzlePage() {
     return { row, col };
   }
 
-  /** Board-level pointer down — start a drag */
   function onBoardPointerDown(e: PointerEvent<HTMLDivElement>) {
     const cell = cellFromPoint(e.clientX, e.clientY);
     if (!cell) return;
-    // Capture on the board so pointermove keeps firing even when moving fast
     e.currentTarget.setPointerCapture(e.pointerId);
     selStartRef.current = cell;
     selEndRef.current   = cell;
@@ -659,7 +630,6 @@ export default function WordPuzzlePage() {
     setSelEnd(cell);
   }
 
-  /** Board-level pointer move — update the end cell while dragging */
   function onBoardPointerMove(e: PointerEvent<HTMLDivElement>) {
     if (e.buttons === 0 || !selStartRef.current) return;
     const cell = cellFromPoint(e.clientX, e.clientY);
@@ -669,7 +639,6 @@ export default function WordPuzzlePage() {
     }
   }
 
-  /** Submit selection on pointer up */
   const onBoardPointerUp = useCallback((e?: PointerEvent<HTMLDivElement>) => {
     const start = selStartRef.current;
     const end   = selEndRef.current;
@@ -678,6 +647,11 @@ export default function WordPuzzlePage() {
     if (!start || !end || !gameId || !socket) { setSelStart(null); setSelEnd(null); return; }
     if (start.row === end.row && start.col === end.col) {
       setSelStart(null); setSelEnd(null); return;
+    }
+    // Save the path so we can shake those cells on failure
+    const path = buildPath(start, end);
+    if (path) {
+      lastClaimedPathRef.current = new Set(path.map(c => `${c.row},${c.col}`));
     }
     socket.emit('wp:game:claim', {
       gameId,
@@ -689,11 +663,8 @@ export default function WordPuzzlePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, socket]);
 
-  // ── Cell visual state ───────────────────────────────────────────────────
   function getCellStyle(row: number, col: number): { className: string; style: CSSProperties } {
     const key = `${row},${col}`;
-
-    // Claimed?
     const claimedWord = words.find((w) => w.claimedBy && w.cells.some((c) => c.row === row && c.col === col));
     if (claimedWord) {
       const owner = players.find((p) => p.username === claimedWord.claimedBy);
@@ -703,30 +674,408 @@ export default function WordPuzzlePage() {
         style: { '--claimed-color': color, '--claimed-bg': `${color}22` } as CSSProperties,
       };
     }
-
-    // In current selection?
     if (selectionSet.has(key)) {
       return { className: `${styles.cell} ${styles.cellSelected}`, style: {} };
     }
-
     return { className: styles.cell ?? '', style: {} };
   }
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  // ── Landing page bubble physics ──────────────────────────────────────
+  const BUBBLE_WORDS = [
+    'PUZZLE', 'BRAIN', 'CONNECT', 'WORDS', 'THINK',
+    'PLAY', 'SOLVE', 'FIND', 'SEARCH', 'MIND',
+    'DISCOVER', 'WEB', 'LINK', 'MATCH', 'EXPLORE',
+    'CLEVER', 'SPARK', 'FLOW', 'LOGIC', 'FUN',
+    'QUEST', 'SWIFT', 'DREAM', 'GLOW', 'POWER',
+    'FOCUS', 'SHARP', 'BLAZE', 'DRIFT', 'ORBIT',
+    'PULSE', 'CRAFT', 'NEXUS', 'WAVE', 'PIXEL',
+    'SYNC', 'RUSH', 'FORGE', 'BOLT', 'ALPHA',
+    'PRIME', 'NOVA', 'TURBO', 'CIPHER', 'SPARK',
+    'ECHO', 'VAULT', 'GRID', 'NODE', 'CORE',
+    'FLASH', 'STACK', 'PRISM', 'ATOM', 'FLARE',
+    'HYPER', 'SURGE', 'VIBE', 'WARP', 'ZONE',
+    'HACK', 'SHIFT', 'LOOP', 'BYTE', 'DASH',
+  ];
+
+  const bubblesRef = useRef<Array<{
+    x: number; y: number; vx: number; vy: number;
+    word: string; size: number; color: string; dragging: boolean;
+    floating: boolean; wasThrown: boolean;
+  }>>([]);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animFrameRef = useRef<number>(0);
+  const dragIdxRef = useRef<number>(-1);
+  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const mouseRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [collisionFlash, setCollisionFlash] = useState<{ x: number; y: number; id: number } | null>(null);
+
+  const BUBBLE_COLORS = [
+    '#6c5ce7', '#4ecdc4', '#fd9644', '#e056a0', '#20bf6b',
+    '#f87171', '#a78bfa', '#06b6d4', '#8b5cf6', '#f59e0b',
+    '#3b82f6', '#ec4899', '#14b8a6', '#f97316', '#8b5cf6',
+    '#ef4444', '#10b981', '#6366f1', '#f472b6', '#22d3ee',
+  ];
+
+  const initBubbles = useCallback(() => {
+    if (!canvasRef.current) return;
+    const w = canvasRef.current.width;
+    const h = canvasRef.current.height;
+    bubblesRef.current = BUBBLE_WORDS.map((word, i) => {
+      const isFloating = i < 12;
+      return {
+        x: Math.random() * (w - 100) + 50,
+        y: isFloating ? Math.random() * (h * 0.55) + 40 : Math.random() * h * 0.3 + 20,
+        vx: isFloating ? (Math.random() - 0.5) * 1.5 : (Math.random() - 0.5) * 2,
+        vy: isFloating ? (Math.random() - 0.5) * 1 : Math.random() * 2,
+        word,
+        size: word.length > 6 ? 56 : word.length > 4 ? 48 : 42,
+        color: BUBBLE_COLORS[i % BUBBLE_COLORS.length]!,
+        dragging: false,
+        floating: isFloating,
+        wasThrown: false,
+      };
+    });
+  }, []);
+
+  const animateBubbles = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    const bubbles = bubblesRef.current;
+    const GRAVITY = 0.18;
+    const BOUNCE = 0.5;
+    const FRICTION = 0.995;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Draw web/network background pattern
+    ctx.save();
+    ctx.globalAlpha = 0.08;
+    ctx.strokeStyle = '#6c5ce7';
+    ctx.lineWidth = 1;
+    const nodeSpacing = 120;
+    const cols = Math.ceil(w / nodeSpacing) + 1;
+    const rows = Math.ceil(h / nodeSpacing) + 1;
+    const webNodes: Array<{ x: number; y: number }> = [];
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const nx = col * nodeSpacing + (row % 2 === 0 ? 0 : nodeSpacing * 0.5);
+        const ny = row * nodeSpacing;
+        webNodes.push({ x: nx, y: ny });
+      }
+    }
+    for (let i = 0; i < webNodes.length; i++) {
+      const n1 = webNodes[i]!;
+      for (let j = i + 1; j < webNodes.length; j++) {
+        const n2 = webNodes[j]!;
+        const d = Math.sqrt((n2.x - n1.x) ** 2 + (n2.y - n1.y) ** 2);
+        if (d < nodeSpacing * 1.3) {
+          ctx.beginPath();
+          ctx.moveTo(n1.x, n1.y);
+          ctx.lineTo(n2.x, n2.y);
+          ctx.stroke();
+        }
+      }
+    }
+    // Draw web node dots
+    ctx.globalAlpha = 0.12;
+    ctx.fillStyle = '#6c5ce7';
+    for (const node of webNodes) {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    for (let i = 0; i < bubbles.length; i++) {
+      const b = bubbles[i]!;
+      if (!b.dragging) {
+        if (!b.floating) {
+          b.vy += GRAVITY;
+        }
+        b.vx *= FRICTION;
+        b.vy *= FRICTION;
+        b.x += b.vx;
+        b.y += b.vy;
+
+        // Wall bounces
+        if (b.x - b.size < 0) { b.x = b.size; b.vx = Math.abs(b.vx) * BOUNCE; }
+        if (b.x + b.size > w) { b.x = w - b.size; b.vx = -Math.abs(b.vx) * BOUNCE; }
+        if (b.y - b.size < 0) { b.y = b.size; b.vy = Math.abs(b.vy) * BOUNCE; }
+        // Floor
+        if (b.y + b.size > h) {
+          b.y = h - b.size;
+          b.vy = -Math.abs(b.vy) * BOUNCE;
+          b.vx *= 0.95;
+          if (Math.abs(b.vy) < 1) b.vy = 0;
+        }
+
+        // Floating balls gently drift (no gravity, slight wandering)
+        if (b.floating && Math.abs(b.vx) < 0.3 && Math.abs(b.vy) < 0.3) {
+          b.vx += (Math.random() - 0.5) * 0.15;
+          b.vy += (Math.random() - 0.5) * 0.1;
+        }
+      }
+
+      // Collision detection
+      for (let j = i + 1; j < bubbles.length; j++) {
+        const b2 = bubbles[j]!;
+        const dx = b2.x - b.x;
+        const dy = b2.y - b.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const minDist = b.size + b2.size;
+        if (dist < minDist && dist > 0) {
+          const nx = dx / dist;
+          const ny = dy / dist;
+          const overlap = minDist - dist;
+          if (!b.dragging) { b.x -= nx * overlap * 0.5; b.y -= ny * overlap * 0.5; }
+          if (!b2.dragging) { b2.x += nx * overlap * 0.5; b2.y += ny * overlap * 0.5; }
+          const dvx = b.vx - b2.vx;
+          const dvy = b.vy - b2.vy;
+          const dot = dvx * nx + dvy * ny;
+          if (dot > 0) {
+            const impactStrength = Math.abs(dot);
+            const eitherThrown = b.wasThrown || b2.wasThrown || b.dragging || b2.dragging;
+            const bounceFactor = (eitherThrown && impactStrength > 3) ? 1.2 : 0.6;
+            if (!b.dragging) { b.vx -= dot * nx * bounceFactor; b.vy -= dot * ny * bounceFactor; }
+            if (!b2.dragging) { b2.vx += dot * nx * bounceFactor; b2.vy += dot * ny * bounceFactor; }
+            // Only launch balls hard when one was thrown by user
+            if (eitherThrown && impactStrength > 3) {
+              if (!b2.dragging) {
+                b2.vy -= impactStrength * 0.9;
+                b2.vx += (Math.random() - 0.5) * impactStrength * 0.6;
+              }
+              if (!b.dragging) {
+                b.vy -= impactStrength * 0.9;
+                b.vx += (Math.random() - 0.5) * impactStrength * 0.6;
+              }
+              setCollisionFlash({ x: (b.x + b2.x) / 2, y: (b.y + b2.y) / 2, id: Date.now() });
+            }
+          }
+        }
+      }
+
+      // Draw bubble - subtle flat style
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+      ctx.fillStyle = b.color;
+      ctx.globalAlpha = 0.85;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // Soft inner highlight
+      const highlight = ctx.createRadialGradient(
+        b.x - b.size * 0.3, b.y - b.size * 0.3, 0,
+        b.x, b.y, b.size
+      );
+      highlight.addColorStop(0, 'rgba(255,255,255,0.25)');
+      highlight.addColorStop(0.7, 'transparent');
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+      ctx.fillStyle = highlight;
+      ctx.fill();
+
+      // Text
+      ctx.fillStyle = 'white';
+      ctx.font = `${b.size * 0.35}px "Lilita One", cursive`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(b.word, b.x, b.y);
+      ctx.restore();
+    }
+
+    animFrameRef.current = requestAnimationFrame(animateBubbles);
+  }, []);
+
+  const handleCanvasPointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    mouseRef.current = { x: mx, y: my };
+
+    for (let i = bubblesRef.current.length - 1; i >= 0; i--) {
+      const b = bubblesRef.current[i]!;
+      const dx = mx - b.x;
+      const dy = my - b.y;
+      if (dx * dx + dy * dy < b.size * b.size) {
+        dragIdxRef.current = i;
+        dragOffsetRef.current = { x: dx, y: dy };
+        b.dragging = true;
+        b.vx = 0;
+        b.vy = 0;
+        canvas.setPointerCapture(e.pointerId);
+        break;
+      }
+    }
+  }, []);
+
+  const handleCanvasPointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas || dragIdxRef.current < 0) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const my = (e.clientY - rect.top) * (canvas.height / rect.height);
+    const prevX = mouseRef.current.x;
+    const prevY = mouseRef.current.y;
+    mouseRef.current = { x: mx, y: my };
+    const b = bubblesRef.current[dragIdxRef.current];
+    if (b) {
+      b.x = mx - dragOffsetRef.current.x;
+      b.y = my - dragOffsetRef.current.y;
+      b.vx = (mx - prevX) * 0.3;
+      b.vy = (my - prevY) * 0.3;
+    }
+  }, []);
+
+  const handleCanvasPointerUp = useCallback(() => {
+    if (dragIdxRef.current >= 0) {
+      const b = bubblesRef.current[dragIdxRef.current];
+      if (b) {
+        b.dragging = false;
+        b.wasThrown = true;
+        setTimeout(() => { b.wasThrown = false; }, 2000);
+      }
+      dragIdxRef.current = -1;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'landing') {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      return;
+    }
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resize = () => {
+      canvas.width = window.innerWidth * window.devicePixelRatio;
+      canvas.height = window.innerHeight * window.devicePixelRatio;
+      if (bubblesRef.current.length === 0) initBubbles();
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    animateBubbles();
+    return () => {
+      window.removeEventListener('resize', resize);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [phase, initBubbles, animateBubbles]);
+
+  // ══════════════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════════════
+
+  /* ─── LANDING PAGE ─── */
+  if (phase === 'landing') {
+    return (
+      <div className={styles.landingPage}>
+        <canvas
+          ref={canvasRef}
+          className={styles.bubbleCanvas}
+          onPointerDown={handleCanvasPointerDown}
+          onPointerMove={handleCanvasPointerMove}
+          onPointerUp={handleCanvasPointerUp}
+          onPointerCancel={handleCanvasPointerUp}
+        />
+
+        {collisionFlash && (
+          <div
+            key={collisionFlash.id}
+            className={styles.collisionSpark}
+            style={{ left: `${(collisionFlash.x / (window.innerWidth * window.devicePixelRatio)) * 100}%`, top: `${(collisionFlash.y / (window.innerHeight * window.devicePixelRatio)) * 100}%` }}
+          />
+        )}
+
+        <div className={styles.landingContent}>
+          <div className={styles.landingLogoIcon}>
+            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+              <ellipse cx="24" cy="26" rx="10" ry="12" fill="#fbbf24" />
+              <ellipse cx="24" cy="26" rx="10" ry="12" fill="url(#beeBody)" />
+              <rect x="16" y="22" width="16" height="3" rx="1.5" fill="#1a1a2e" opacity="0.7" />
+              <rect x="16" y="28" width="16" height="3" rx="1.5" fill="#1a1a2e" opacity="0.7" />
+              <ellipse cx="24" cy="14" rx="6" ry="5" fill="#fbbf24" />
+              <circle cx="21" cy="13" r="2" fill="#1a1a2e" />
+              <circle cx="27" cy="13" r="2" fill="#1a1a2e" />
+              <ellipse cx="16" cy="16" rx="6" ry="3" fill="rgba(108,92,231,0.2)" transform="rotate(-30 16 16)" />
+              <ellipse cx="32" cy="16" rx="6" ry="3" fill="rgba(108,92,231,0.2)" transform="rotate(30 32 16)" />
+              <path d="M22 10 Q24 6 26 10" stroke="#1a1a2e" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+              <circle cx="22" cy="7" r="1.5" fill="#fd9644" />
+              <circle cx="26" cy="7" r="1.5" fill="#fd9644" />
+              <defs>
+                <linearGradient id="beeBody" x1="14" y1="14" x2="34" y2="38">
+                  <stop stopColor="#fbbf24" stopOpacity="0"/>
+                  <stop offset="1" stopColor="#f59e0b" stopOpacity="0.5"/>
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+
+          <h1 className={styles.landingTitle}>
+            <span>Word Puzzle</span> Bees
+          </h1>
+
+          <p className={styles.landingSubtitle}>
+            Connect letters, discover words, and complete the web.
+            Drag the bubbles around — watch them collide and bounce!
+          </p>
+
+          <div className={styles.landingFeatures}>
+            <div className={styles.landingFeature}>
+              <span className={styles.landingFeatureDot} style={{ background: '#6c5ce7' }} />
+              <span>Mind-map puzzles</span>
+            </div>
+            <div className={styles.landingFeature}>
+              <span className={styles.landingFeatureDot} style={{ background: '#4ecdc4' }} />
+              <span>Real-time multiplayer</span>
+            </div>
+            <div className={styles.landingFeature}>
+              <span className={styles.landingFeatureDot} style={{ background: '#fd9644' }} />
+              <span>3 difficulty levels</span>
+            </div>
+          </div>
+
+          <button
+            className={styles.startBtn}
+            onClick={() => setPhase('menu')}
+          >
+            Start Playing
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   /* ─── MENU ─── */
   if (phase === 'menu') {
     return (
       <div className={styles.page}>
         <div className={styles.menuCard}>
-          <div className={styles.menuEmoji}>📝</div>
-          <h1 className={styles.menuTitle}>Word Search</h1>
+          <div className={styles.menuLogoMark}>
+            <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+              <ellipse cx="24" cy="26" rx="10" ry="12" fill="#fbbf24" />
+              <rect x="16" y="22" width="16" height="3" rx="1.5" fill="#1a1a2e" opacity="0.7" />
+              <rect x="16" y="28" width="16" height="3" rx="1.5" fill="#1a1a2e" opacity="0.7" />
+              <ellipse cx="24" cy="14" rx="6" ry="5" fill="#fbbf24" />
+              <circle cx="21" cy="13" r="2" fill="#1a1a2e" />
+              <circle cx="27" cy="13" r="2" fill="#1a1a2e" />
+              <ellipse cx="16" cy="16" rx="6" ry="3" fill="rgba(108,92,231,0.2)" transform="rotate(-30 16 16)" />
+              <ellipse cx="32" cy="16" rx="6" ry="3" fill="rgba(108,92,231,0.2)" transform="rotate(30 32 16)" />
+              <path d="M22 10 Q24 6 26 10" stroke="#1a1a2e" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+              <circle cx="22" cy="7" r="1.5" fill="#fd9644" />
+              <circle cx="26" cy="7" r="1.5" fill="#fd9644" />
+            </svg>
+          </div>
+          <h1 className={styles.menuTitle}>Word Puzzle Bees</h1>
 
-          {/* Inline name field */}
           <div className={styles.nameRow}>
             <input
               type="text"
-              placeholder="Your username"
+              placeholder="Enter your name"
               value={nameInput}
               onChange={(e) => {
                 setNameInput(e.target.value);
@@ -764,19 +1113,19 @@ export default function WordPuzzlePage() {
             </button>
           </div>
 
-          {/* Solo play card — full width, distinct colour */}
           <button className={styles.soloCard} onClick={() => {
             const u = nameInput.trim(); if (!u) { triggerNameShake(); return; }
             handleSetUsername(u); setPhase('solo-setup');
           }}>
-            <span className={styles.soloCardEmoji}>🧩</span>
-            <span className={styles.soloCardLabel}>Solo Play</span>
-            <span className={styles.soloCardHint}>Beat the clock, no opponents</span>
+            <span className={styles.soloCardDot} />
+            <div>
+              <span className={styles.soloCardLabel}>Solo Play</span>
+              <span className={styles.soloCardHint}>Beat the clock, no opponents</span>
+            </div>
           </button>
 
-          {/* Difficulty selector (used for matchmaking; rooms set it in the lobby) */}
           <div className={styles.difficultySection}>
-            <p className={styles.difficultyTitle}>🎯 Difficulty <span className={styles.difficultyNote}>(for Find Player)</span></p>
+            <p className={styles.difficultyTitle}>Difficulty <span className={styles.difficultyNote}>(for Find Player)</span></p>
             <div className={styles.difficultyRow}>
               {DIFFICULTIES.map((d) => (
                 <button
@@ -784,7 +1133,7 @@ export default function WordPuzzlePage() {
                   className={`${styles.diffChip} ${menuDifficulty === d.id ? styles.diffChipActive : ''}`}
                   onClick={() => setMenuDifficulty(d.id)}
                 >
-                  <span>{d.emoji}</span>
+                  <span className={styles.diffDot} style={{ background: d.id === 'easy' ? '#20bf6b' : d.id === 'medium' ? '#fd9644' : '#e74c3c' }} />
                   <span>{d.label}</span>
                   <span className={styles.diffChipGrid}>{d.gridLabel}</span>
                 </button>
@@ -819,7 +1168,6 @@ export default function WordPuzzlePage() {
 
           {roomError && <p className={styles.errorMsg}>{roomError}</p>}
 
-          {/* Vocab CTA */}
           <button
             className={styles.vocabCta}
             onClick={() => router.push('/vocab')}
@@ -854,12 +1202,11 @@ export default function WordPuzzlePage() {
     return (
       <div className={styles.page}>
         <div className={styles.menuCard}>
-          <div className={styles.menuEmoji}>🧩</div>
           <h2 className={styles.menuTitle}>Solo Play</h2>
           <p className={styles.menuDesc}>Find all words as fast as you can.<br />Time starts when the board loads.</p>
 
           <div className={styles.difficultySection} style={{ marginTop: 4 }}>
-            <p className={styles.difficultyTitle}>🎯 Choose Difficulty</p>
+            <p className={styles.difficultyTitle}>Choose Difficulty</p>
             <div className={styles.difficultyRow}>
               {DIFFICULTIES.map((d) => (
                 <button
@@ -867,7 +1214,7 @@ export default function WordPuzzlePage() {
                   className={`${styles.diffChip} ${soloDifficulty === d.id ? styles.diffChipActive : ''}`}
                   onClick={() => setSoloDifficulty(d.id)}
                 >
-                  <span>{d.emoji}</span>
+                  <span className={styles.diffDot} style={{ background: d.id === 'easy' ? '#20bf6b' : d.id === 'medium' ? '#fd9644' : '#e74c3c' }} />
                   <span>{d.label}</span>
                   <span className={styles.diffChipGrid}>{d.gridLabel} · {d.wordCount} words</span>
                 </button>
@@ -876,7 +1223,7 @@ export default function WordPuzzlePage() {
           </div>
 
           <button className={styles.soloStartBtn} onClick={handleStartSolo}>
-            🧩 Start Solo Game
+            Start Solo Game
           </button>
           <button className={styles.ghostBtn} onClick={() => setPhase('menu')}>← Back</button>
         </div>
@@ -892,47 +1239,44 @@ export default function WordPuzzlePage() {
 
     return (
       <div className={styles.gamePage}>
-        {showGuide && (
-          <GameGuide
-            gameKey="word-puzzle"
-            onDone={() => {
-              sessionStorage.setItem('guide_word-puzzle', '1');
-              setShowGuide(false);
-            }}
-          />
-        )}
-        {showCelebration && phase === 'ended' && (
-          <WinCelebration
-            gameKey="word-puzzle"
-            winnerName={endResult ? (endResult[0]?.username ?? '') : ''}
-            currentUser={username}
-            onClose={() => setShowCelebration(false)}
-          />
-        )}
-        {/* Top bar */}
+
         <header className={styles.topBar}>
           <button className={styles.homeBtn} onClick={() => {
             stopSoloTimer(); setIsSolo(false);
-            router.push('/');
+            setPhase('landing');
           }} title="Menu">
             <HomeIcon size={16} />
           </button>
           {isSolo && (
-            <span className={styles.soloBadge}>🧩 Solo</span>
+            <span className={styles.soloBadge}><Puzzle size={14} /> Solo</span>
           )}
           <div className={styles.progressWrap}>
             <div className={styles.progressBar} style={{ width: `${(claimedCount / totalWords) * 100}%` }} />
           </div>
           <span className={styles.progressLabel}>{claimedCount}/{totalWords} found</span>
           {isSolo && (
-            <span className={styles.soloTimer}>⏱ {fmtTime(soloElapsed)}</span>
+            <div className={styles.fuseTimer}>
+              <svg className={styles.fuseSvg} viewBox="0 0 120 24" fill="none">
+                <line x1="10" y1="12" x2="110" y2="12" stroke="#e0ddd8" strokeWidth="4" strokeLinecap="round" />
+                <line x1="10" y1="12" x2="110" y2="12" stroke="url(#fuseGrad)" strokeWidth="4" strokeLinecap="round"
+                  strokeDasharray="100"
+                  strokeDashoffset={Math.max(0, 100 - soloElapsed * 0.5)}
+                />
+                <circle className={styles.fuseGlow} cx={Math.min(110, 10 + soloElapsed * 0.5)} cy="12" r="5" fill="#fd9644" />
+                <circle cx={Math.min(110, 10 + soloElapsed * 0.5)} cy="12" r="3" fill="#f7d794" />
+                <defs>
+                  <linearGradient id="fuseGrad" x1="10" y1="12" x2="110" y2="12" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#fd9644" />
+                    <stop offset="1" stopColor="#e74c3c" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <span className={styles.fuseTime}>{fmtTime(soloElapsed)}</span>
+            </div>
           )}
         </header>
 
-        {/* Main layout */}
         <div className={styles.gameLayout}>
-
-          {/* Left: word list */}
           <aside className={styles.wordList}>
             <p className={styles.wordListTitle}>Words to find</p>
             <div className={styles.wordItems}>
@@ -948,7 +1292,6 @@ export default function WordPuzzlePage() {
                     >
                       <span className={styles.wordItemText}>{w.word}</span>
                       <div className={styles.wordItemActions}>
-                        {/* Pronounce button */}
                         <button
                           className={styles.wordActionBtn}
                           onClick={() => handlePronounce(w.word)}
@@ -957,7 +1300,6 @@ export default function WordPuzzlePage() {
                         >
                           <Volume2 size={12} />
                         </button>
-                        {/* Definition button */}
                         <button
                           className={`${styles.wordActionBtn} ${isDefOpen ? styles.wordActionBtnActive : ''}`}
                           onClick={() => handleShowDefinition(w.id, w.word)}
@@ -973,7 +1315,6 @@ export default function WordPuzzlePage() {
                         )}
                       </div>
                     </div>
-                    {/* Definition popup */}
                     {isDefOpen && (
                       <div className={styles.wordDefPopup}>
                         {definitionPopup?.loading ? (
@@ -998,18 +1339,16 @@ export default function WordPuzzlePage() {
             </div>
           </aside>
 
-          {/* Center: board */}
           <main className={styles.boardWrap}>
-            {/* Claim feedback toast */}
-            {lastClaim && (
-              <div className={`${styles.toast} ${lastClaim.correct ? styles.toastGood : styles.toastBad}`}>
-                {lastClaim.correct ? `✓ ${lastClaim.word}!` : '✗ Not a word'}
+            {lastClaim && lastClaim.correct && (
+              <div className={`${styles.toast} ${styles.toastGood}`}>
+                {`✓ ${lastClaim.word}!`}
               </div>
             )}
 
             <div
               ref={boardRef}
-              className={styles.board}
+              className={`${styles.board}`}
               style={{ '--grid-size': gridSize } as CSSProperties}
               onPointerDown={onBoardPointerDown}
               onPointerMove={onBoardPointerMove}
@@ -1018,16 +1357,20 @@ export default function WordPuzzlePage() {
             >
               {board.map((row, ri) =>
                 row.map((letter, ci) => {
+                  const cellIndex = ri * (board[0]?.length ?? 0) + ci;
+                  const isRevealed = cellIndex < revealedCells;
                   const { className, style } = getCellStyle(ri, ci);
+                  const cellKey = `${ri},${ci}`;
+                  const isShaking = shakeCells.has(cellKey);
                   return (
                     <div
                       key={`${ri}-${ci}`}
-                      className={className}
+                      className={`${className} ${isRevealed ? styles.cellRevealed : styles.cellHidden} ${isShaking ? styles.cellShake : ''}`}
                       style={style}
                       data-row={ri}
                       data-col={ci}
                     >
-                      {letter}
+                      {isRevealed ? letter : ''}
                     </div>
                   );
                 })
@@ -1035,7 +1378,6 @@ export default function WordPuzzlePage() {
             </div>
           </main>
 
-          {/* Right: scoreboard */}
           <aside className={styles.scoreboard}>
             <p className={styles.scoreTitle}><Trophy size={13} /> Scores</p>
             {[...players]
@@ -1053,7 +1395,6 @@ export default function WordPuzzlePage() {
                 </div>
               ))
             }
-
             {myPlayer && (
               <div className={styles.myScore}>
                 <span>Your score</span>
@@ -1067,8 +1408,8 @@ export default function WordPuzzlePage() {
         {phase === 'ended' && endResult && (
           <div className={styles.overlay}>
             <div className={styles.resultCard}>
-              <div className={styles.resultEmoji}>🏆</div>
-              <h2 className={styles.resultTitle}>{isSolo ? '🧩 Puzzle Complete!' : 'Game Over!'}</h2>
+              <div className={styles.resultEmoji}><Trophy size={48} color="#fd9644" /></div>
+              <h2 className={styles.resultTitle}>{isSolo ? 'Puzzle Complete!' : 'Game Over!'}</h2>
               {isSolo && (
                 <p className={styles.soloFinishTime}>
                   Finished in <strong>{fmtTime(soloElapsed)}</strong>
@@ -1082,7 +1423,7 @@ export default function WordPuzzlePage() {
                     style={{ '--p-color': PLAYER_COLORS[p.colorIndex]! } as CSSProperties}
                   >
                     <span className={styles.resultRank}>
-                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                      {i === 0 ? <Trophy size={16} color="#fd9644" /> : i === 1 ? <Trophy size={14} color="#a0a0a0" /> : i === 2 ? <Trophy size={14} color="#cd7f32" /> : `#${i + 1}`}
                     </span>
                     <span className={styles.resultName}>{p.username}</span>
                     <span className={styles.resultScore}>{p.score} pts</span>
@@ -1131,15 +1472,15 @@ export default function WordPuzzlePage() {
                   </button>
                 )}
                 {rematchError && <p className={styles.rematchErrorText}>{rematchError}</p>}
-                <button className={styles.ghostBtn} onClick={() => { cleanupCall(); stopSoloTimer(); setIsSolo(false); router.push('/'); }}>
-                  Game Hub
+                <button className={styles.ghostBtn} onClick={() => { cleanupCall(); stopSoloTimer(); setIsSolo(false); setPhase('landing'); }}>
+                  Home
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ── Floating call bar ── */}
+        {/* Floating call bar */}
         {callRoomActive && phase === 'playing' && !isSolo && (
           <div className={`${styles.callFloatingBar} ${amInCall ? styles.callFloatingBarActive : ''}`}>
             <span className={styles.callFloatingIcon}>{amInCall ? <Mic size={18} /> : <Phone size={18} />}</span>
@@ -1182,10 +1523,9 @@ export default function WordPuzzlePage() {
           </div>
         )}
 
-        {/* ── Chat + call panel — hidden in solo mode ── */}
+        {/* Chat panel */}
         {!isSolo && (
         <div className={`${styles.wpChatPanel} ${chatOpen ? styles.wpChatOpen : ''}`}>
-          {/* Call tab (sits above chat tab) */}
           {phase === 'playing' && (
             <button
               className={`${styles.wpCallTabBtn} ${callRoomActive ? styles.wpCallTabBtnActive : ''}`}
@@ -1198,7 +1538,6 @@ export default function WordPuzzlePage() {
             </button>
           )}
 
-          {/* Chat toggle tab */}
           <button className={styles.wpChatToggle} onClick={() => {
             if (!chatOpen) setUnreadCount(0);
             setChatOpen((o) => !o);
