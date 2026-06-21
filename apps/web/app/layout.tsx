@@ -20,8 +20,8 @@ const lilitaOne = Lilita_One({
 });
 
 export const metadata: Metadata = {
-  title: "4 in a Row - Multiplayer Game",
-  description: "Play 4 in a Row against players or compete against a strategic bot!",
+  title: "Play Arena",
+  description: "Pick a game. Challenge your friends. Have fun.",
 };
 
 export const viewport = {

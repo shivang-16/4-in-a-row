@@ -124,6 +124,233 @@ importers:
       react-dom:
         specifier: ^19.2.0
         version: 19.2.1(react@19.2.1)
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.19.1
+      '@types/react':
+        specifier: 19.2.2
+        version: 19.2.2
+      '@types/react-dom':
+        specifier: 19.2.2
+        version: 19.2.2(@types/react@19.2.2)
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  apps/web-4-in-a-row:
+    dependencies:
+      '@repo/game-ui':
+        specifier: workspace:*
+        version: link:../../packages/game-ui
+      '@vercel/analytics':
+        specifier: ^2.0.1
+        version: 2.0.1(next@16.0.7)(react@19.2.1)
+      lucide-react:
+        specifier: ^1.8.0
+        version: 1.8.0(react@19.2.1)
+      next:
+        specifier: ^16.0.7
+        version: 16.0.7(react-dom@19.2.1)(react@19.2.1)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.1
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.1(react@19.2.1)
+      socket.io-client:
+        specifier: ^4.8.1
+        version: 4.8.1
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.19.1
+      '@types/react':
+        specifier: 19.2.2
+        version: 19.2.2
+      '@types/react-dom':
+        specifier: 19.2.2
+        version: 19.2.2(@types/react@19.2.2)
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  apps/web-bingo:
+    dependencies:
+      '@repo/game-ui':
+        specifier: workspace:*
+        version: link:../../packages/game-ui
+      '@vercel/analytics':
+        specifier: ^2.0.1
+        version: 2.0.1(next@16.0.7)(react@19.2.1)
+      lucide-react:
+        specifier: ^1.8.0
+        version: 1.8.0(react@19.2.1)
+      next:
+        specifier: ^16.0.7
+        version: 16.0.7(react-dom@19.2.1)(react@19.2.1)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.1
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.1(react@19.2.1)
+      socket.io-client:
+        specifier: ^4.8.1
+        version: 4.8.1
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.19.1
+      '@types/react':
+        specifier: 19.2.2
+        version: 19.2.2
+      '@types/react-dom':
+        specifier: 19.2.2
+        version: 19.2.2(@types/react@19.2.2)
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  apps/web-dots-and-boxes:
+    dependencies:
+      '@repo/game-ui':
+        specifier: workspace:*
+        version: link:../../packages/game-ui
+      '@vercel/analytics':
+        specifier: ^2.0.1
+        version: 2.0.1(next@16.0.7)(react@19.2.1)
+      lucide-react:
+        specifier: ^1.8.0
+        version: 1.8.0(react@19.2.1)
+      next:
+        specifier: ^16.0.7
+        version: 16.0.7(react-dom@19.2.1)(react@19.2.1)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.1
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.1(react@19.2.1)
+      socket.io-client:
+        specifier: ^4.8.1
+        version: 4.8.1
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.19.1
+      '@types/react':
+        specifier: 19.2.2
+        version: 19.2.2
+      '@types/react-dom':
+        specifier: 19.2.2
+        version: 19.2.2(@types/react@19.2.2)
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  apps/web-sudoku:
+    dependencies:
+      '@repo/game-ui':
+        specifier: workspace:*
+        version: link:../../packages/game-ui
+      '@vercel/analytics':
+        specifier: ^2.0.1
+        version: 2.0.1(next@16.0.7)(react@19.2.1)
+      lucide-react:
+        specifier: ^1.8.0
+        version: 1.8.0(react@19.2.1)
+      next:
+        specifier: ^16.0.7
+        version: 16.0.7(react-dom@19.2.1)(react@19.2.1)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.1
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.1(react@19.2.1)
+      socket.io-client:
+        specifier: ^4.8.1
+        version: 4.8.1
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../../packages/typescript-config
+      '@types/node':
+        specifier: ^22.15.3
+        version: 22.19.1
+      '@types/react':
+        specifier: 19.2.2
+        version: 19.2.2
+      '@types/react-dom':
+        specifier: 19.2.2
+        version: 19.2.2(@types/react@19.2.2)
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
+
+  apps/web-word-puzzle:
+    dependencies:
+      '@repo/game-ui':
+        specifier: workspace:*
+        version: link:../../packages/game-ui
+      '@vercel/analytics':
+        specifier: ^2.0.1
+        version: 2.0.1(next@16.0.7)(react@19.2.1)
+      lucide-react:
+        specifier: ^1.8.0
+        version: 1.8.0(react@19.2.1)
+      next:
+        specifier: ^16.0.7
+        version: 16.0.7(react-dom@19.2.1)(react@19.2.1)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.1
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.1(react@19.2.1)
       socket.io-client:
         specifier: ^4.8.1
         version: 4.8.1
@@ -185,6 +412,34 @@ importers:
       typescript-eslint:
         specifier: ^8.47.0
         version: 8.48.1(eslint@9.39.1)(typescript@5.9.2)
+
+  packages/game-ui:
+    dependencies:
+      react:
+        specifier: ^19.2.0
+        version: 19.2.1
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.1(react@19.2.1)
+    devDependencies:
+      '@repo/eslint-config':
+        specifier: workspace:*
+        version: link:../eslint-config
+      '@repo/typescript-config':
+        specifier: workspace:*
+        version: link:../typescript-config
+      '@types/react':
+        specifier: 19.2.2
+        version: 19.2.2
+      '@types/react-dom':
+        specifier: 19.2.2
+        version: 19.2.2(@types/react@19.2.2)
+      eslint:
+        specifier: ^9.39.1
+        version: 9.39.1
+      typescript:
+        specifier: 5.9.2
+        version: 5.9.2
 
   packages/typescript-config: {}
 
@@ -2810,6 +3065,7 @@ packages:
   /next@16.0.7(react-dom@19.2.1)(react@19.2.1):
     resolution: {integrity: sha512-3mBRJyPxT4LOxAJI6IsXeFtKfiJUbjCLgvXO02fV8Wy/lIhPvP94Fe7dGhUgHXcQy4sSuYwQNcOLhIfOm0rL0A==}
     engines: {node: '>=20.9.0'}
+    deprecated: This version has a security vulnerability. Please upgrade to a patched version. See https://nextjs.org/blog/security-update-2025-12-11 for more details.
     hasBin: true
     peerDependencies:
       '@opentelemetry/api': ^1.1.0

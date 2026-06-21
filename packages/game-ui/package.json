@@ -1,0 +1,27 @@
+{
+  "name": "@repo/game-ui",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./GameGuide": "./src/GameGuide.tsx",
+    "./WinCelebration": "./src/WinCelebration.tsx",
+    "./CharacterAvatar": "./src/CharacterAvatar.tsx",
+    "./characters": "./src/characters.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
+    "@repo/typescript-config": "workspace:*",
+    "@types/react": "19.2.2",
+    "@types/react-dom": "19.2.2",
+    "eslint": "^9.39.1",
+    "typescript": "5.9.2"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

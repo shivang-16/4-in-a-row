@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import styles from './hub.module.css';
 import WelcomePopup from '../../components/WelcomePopup';
+import { GAME_URLS } from '../../lib/game-urls';
 
 const GAMES = [
   {
-    href: '/4-in-a-row',
+    slug: '4-in-a-row' as const,
     title: '4 in a Row',
     icon: '🔴',
     accent: '#ff6b6b',
@@ -17,7 +18,7 @@ const GAMES = [
     players: '1-8',
   },
   {
-    href: '/word-puzzle',
+    slug: 'word-puzzle' as const,
     title: 'Word Search',
     icon: '📝',
     accent: '#c8972a',
@@ -28,7 +29,7 @@ const GAMES = [
     players: '1-8',
   },
   {
-    href: '/dots-and-boxes',
+    slug: 'dots-and-boxes' as const,
     title: 'Dots & Boxes',
     icon: '⬜',
     accent: '#a044ff',
@@ -39,7 +40,7 @@ const GAMES = [
     players: '1-8',
   },
   {
-    href: '/bingo',
+    slug: 'bingo' as const,
     title: 'Bingo',
     icon: '🎱',
     accent: '#22c55e',
@@ -50,7 +51,7 @@ const GAMES = [
     players: '1-8',
   },
   {
-    href: '/sudoku',
+    slug: 'sudoku' as const,
     title: 'Sudoku',
     icon: '🔢',
     accent: '#c8972a',
@@ -66,7 +67,6 @@ export default function HubPage() {
   return (
     <div className={styles.page}>
       <WelcomePopup />
-      {/* Hero */}
       <header className={styles.hero}>
         <div className={styles.logoWrap}>
           <span className={styles.logoDice}>🎲</span>
@@ -77,12 +77,11 @@ export default function HubPage() {
         <p className={styles.tagline}>Pick a game. Challenge your friends. Have fun.</p>
       </header>
 
-      {/* Game cards */}
       <main className={styles.grid}>
         {GAMES.map((g) => (
           <Link
-            key={g.href}
-            href={g.href}
+            key={g.slug}
+            href={GAME_URLS[g.slug]}
             className={styles.card}
             style={{
               '--accent': g.accent,
@@ -112,7 +111,6 @@ export default function HubPage() {
         ))}
       </main>
 
-      {/* Footer */}
       <footer className={styles.footer}>
         <span className={styles.footerText}>Made with <span className={styles.heart}>&#10084;</span> by Shivang</span>
       </footer>
