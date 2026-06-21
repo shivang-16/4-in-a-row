@@ -43,6 +43,32 @@ export default function WordPuzzlePage() {
   const [socket, setSocket]             = useState<Socket | null>(null);
   const [phase, setPhase]               = useState<GamePhase>('landing');
 
+  // ── Theme ──────────────────────────────────────────────────────────────────
+  type AppTheme = 'bees' | 'sand' | 'dark';
+  const THEMES: { id: AppTheme; label: string; icon: string; desc: string }[] = [
+    { id: 'bees', label: 'Word Puzzle Bees', icon: '🐝', desc: 'Purple & cream' },
+    { id: 'sand', label: 'Sand Timer',       icon: '🏜️', desc: 'Warm terracotta' },
+    { id: 'dark', label: 'Tile Reveal',      icon: '🌙', desc: 'Dark slate & amber' },
+  ];
+  const [theme, setTheme] = useState<AppTheme>('bees');
+  const [themeOpen, setThemeOpen] = useState(false);
+  useEffect(() => {
+    const saved = localStorage.getItem('wp_theme') as AppTheme | null;
+    if (saved && THEMES.some(t => t.id === saved)) setTheme(saved);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme === 'bees' ? '' : theme);
+    localStorage.setItem('wp_theme', theme);
+  }, [theme]);
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!themeOpen) return;
+    const close = () => setThemeOpen(false);
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [themeOpen]);
+
   const [definitionPopup, setDefinitionPopup] = useState<{ wordId: string; meaning: string; loading: boolean } | null>(null);
 
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
@@ -970,10 +996,45 @@ export default function WordPuzzlePage() {
   // RENDER
   // ══════════════════════════════════════════════════════════════════════
 
+  /* Fixed theme switcher — rendered on every page */
+  const activeTheme = THEMES.find(t => t.id === theme)!;
+  const ThemeBtn = (
+    <div className={styles.themeDropdown} onPointerDown={e => e.stopPropagation()}>
+      <button
+        className={styles.themeFixedBtn}
+        onClick={() => setThemeOpen(o => !o)}
+        title="Change theme"
+      >
+        <span style={{fontSize:'14px'}}>{activeTheme.icon}</span>
+        <span className={styles.themeSwitchLabel}>{activeTheme.label}</span>
+        <span className={styles.themeChevron}>{themeOpen ? '▲' : '▼'}</span>
+      </button>
+      {themeOpen && (
+        <div className={styles.themeMenu}>
+          {THEMES.map(t => (
+            <button
+              key={t.id}
+              className={`${styles.themeMenuItem} ${theme === t.id ? styles.themeMenuItemActive : ''}`}
+              onClick={() => { setTheme(t.id); setThemeOpen(false); }}
+            >
+              <span className={styles.themeMenuIcon}>{t.icon}</span>
+              <span className={styles.themeMenuText}>
+                <span className={styles.themeMenuLabel}>{t.label}</span>
+                <span className={styles.themeMenuDesc}>{t.desc}</span>
+              </span>
+              {theme === t.id && <span className={styles.themeMenuCheck}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   /* ─── LANDING PAGE ─── */
   if (phase === 'landing') {
     return (
       <div className={styles.landingPage}>
+        {ThemeBtn}
         <canvas
           ref={canvasRef}
           className={styles.bubbleCanvas}
@@ -1054,6 +1115,7 @@ export default function WordPuzzlePage() {
   if (phase === 'menu') {
     return (
       <div className={styles.page}>
+        {ThemeBtn}
         <div className={styles.menuCard}>
           <div className={styles.menuLogoMark}>
             <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
@@ -1193,6 +1255,7 @@ export default function WordPuzzlePage() {
   if (phase === 'matchmaking') {
     return (
       <div className={styles.page}>
+        {ThemeBtn}
         <div className={styles.menuCard}>
           <div className={styles.mmSpinner} />
           <h2 className={styles.menuTitle} style={{ fontSize: '1.5rem' }}>Finding Opponent</h2>
@@ -1207,6 +1270,7 @@ export default function WordPuzzlePage() {
   if (phase === 'solo-setup') {
     return (
       <div className={styles.page}>
+        {ThemeBtn}
         <div className={styles.menuCard}>
           <h2 className={styles.menuTitle}>Solo Play</h2>
           <p className={styles.menuDesc}>Find all words as fast as you can.<br />Time starts when the board loads.</p>
@@ -1261,8 +1325,7 @@ export default function WordPuzzlePage() {
           </div>
           <span className={styles.progressLabel}>{claimedCount}/{totalWords} found</span>
           {isSolo && (
-            <div className={styles.fuseTimer}>
-              <svg className={styles.fuseSvg} viewBox="0 0 120 24" fill="none">
+            <div className={styles.fuseTimer}>              <svg className={styles.fuseSvg} viewBox="0 0 120 24" fill="none">
                 <line x1="10" y1="12" x2="110" y2="12" stroke="#e0ddd8" strokeWidth="4" strokeLinecap="round" />
                 <line x1="10" y1="12" x2="110" y2="12" stroke="url(#fuseGrad)" strokeWidth="4" strokeLinecap="round"
                   strokeDasharray="100"

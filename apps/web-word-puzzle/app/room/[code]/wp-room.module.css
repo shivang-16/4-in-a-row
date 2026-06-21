@@ -123,7 +123,7 @@
   align-items: center;
   gap: 6px;
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 400;
   padding: 8px 14px;
   border-radius: 10px;
   border: 1px solid rgba(108, 92, 231, 0.15);
@@ -153,7 +153,7 @@
   align-items: center;
   gap: 7px;
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: #7c7a8a;
@@ -199,7 +199,7 @@
 
 .playerName {
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 500;
   flex: 1;
   color: #2d2a3e;
 }
@@ -215,7 +215,7 @@
   align-items: center;
   gap: 3px;
   font-size: 0.66rem;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding: 2px 7px;
@@ -283,7 +283,7 @@
   border-radius: 50%;
 }
 
-.diffLabel  { font-size: 0.88rem; font-weight: 700; color: #2d2a3e; }
+.diffLabel  { font-size: 0.88rem; font-weight: 500; color: #2d2a3e; }
 .diffGrid   { font-size: 0.72rem; color: #6c5ce7; font-family: var(--font-body, sans-serif); }
 .diffDesc   { font-size: 0.68rem; color: #9b97b0; text-align: center; }
 
@@ -295,7 +295,7 @@
   gap: 6px;
   background: #6c5ce7;
   color: white;
-  font-weight: 700;
+  font-weight: 500;
   font-size: 0.95rem;
   border: none;
   border-radius: 12px;
@@ -357,7 +357,7 @@
 .btnPrimary {
   background: #6c5ce7;
   color: white;
-  font-weight: 700;
+  font-weight: 500;
   font-size: 0.9rem;
   border: none;
   border-radius: 10px;
@@ -412,7 +412,7 @@
   background: #f8f6ff;
   color: #2d2a3e;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 400;
   outline: none;
   text-align: center;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -437,7 +437,7 @@
   font-size: 0.78rem;
   color: #e74c3c;
   margin: 4px 0 0;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 @keyframes shake {

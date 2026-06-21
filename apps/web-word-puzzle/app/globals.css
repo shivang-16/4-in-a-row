@@ -1,18 +1,32 @@
+/* ── Default Theme: Word Puzzle Bees (purple/cream) ────────────── */
 :root {
   --bg-cream: #faf7f2;
   --bg-warm: #f5f0e8;
   --text-primary: #1a1a2e;
   --text-secondary: #4a4a6a;
   --text-muted: #8888a8;
-  --accent-purple: #6c5ce7;
-  --accent-blue: #4ecdc4;
+  --accent-primary: #6c5ce7;
+  --accent-secondary: #4ecdc4;
   --accent-orange: #fd9644;
   --accent-pink: #e056a0;
   --accent-green: #20bf6b;
+  --accent-purple: #6c5ce7;
+  --accent-blue: #4ecdc4;
   --node-bg: #ffffff;
   --node-border: #e0ddd8;
+  --node-text: #2d2a3e;
+  --node-shadow: 0 2px 6px rgba(108, 92, 231, 0.08);
+  --node-active-border: #6c5ce7;
+  --node-active-bg: #ede9ff;
+  --node-claimed-shadow: 0 2px 8px rgba(108,92,231,0.15);
   --web-line: #d4d0ca;
   --web-line-active: #6c5ce7;
+  --topbar-bg: #ffffff;
+  --topbar-border: #e0ddd8;
+  --sidebar-bg: #ffffff;
+  --card-bg: #ffffff;
+  --progress-track: #ede9ff;
+  --progress-fill: #6c5ce7;
   --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.06);
   --shadow-medium: 0 8px 32px rgba(0, 0, 0, 0.1);
   --shadow-strong: 0 16px 48px rgba(0, 0, 0, 0.14);
@@ -22,6 +36,83 @@
   --radius-xl: 32px;
   --font-display: var(--font-lilita, 'Lilita One', cursive);
   --font-body: var(--font-quicksand, 'Quicksand', sans-serif);
+  /* hex background pattern */
+  --hex-line-color: rgba(108, 92, 231, 0.06);
+  --hex-line-color2: rgba(108, 92, 231, 0.04);
+}
+
+/* ── Sand Timer Scramble Theme (terracotta/warm cream) ─────────── */
+[data-theme="sand"] {
+  --bg-cream: #f5ede0;
+  --bg-warm: #ede0cc;
+  --text-primary: #2c1a0e;
+  --text-secondary: #5c3d22;
+  --text-muted: #a07850;
+  --accent-primary: #c0622a;
+  --accent-secondary: #e8a060;
+  --accent-orange: #d4702a;
+  --accent-pink: #c85a3c;
+  --accent-green: #7aaa5a;
+  --accent-purple: #c0622a;
+  --accent-blue: #e8a060;
+  --node-bg: #fdf5e8;
+  --node-border: #d4a878;
+  --node-text: #2c1a0e;
+  /* embossed card effect */
+  --node-shadow: 0 2px 0 #b87840, 0 4px 8px rgba(90, 50, 10, 0.15), inset 0 1px 0 rgba(255,240,200,0.6);
+  --node-active-border: #c0622a;
+  --node-active-bg: #fbe8d0;
+  --node-claimed-shadow: 0 1px 0 #b87840, 0 2px 4px rgba(90,50,10,0.2);
+  --web-line: #c8a070;
+  --web-line-active: #c0622a;
+  --topbar-bg: #f0dfc0;
+  --topbar-border: #c8a070;
+  --sidebar-bg: #fdf5e8;
+  --card-bg: #fdf5e8;
+  --progress-track: #edd8b8;
+  --progress-fill: #c0622a;
+  --shadow-soft: 0 4px 20px rgba(90, 50, 10, 0.08);
+  --shadow-medium: 0 8px 32px rgba(90, 50, 10, 0.12);
+  --shadow-strong: 0 16px 48px rgba(90, 50, 10, 0.16);
+  --hex-line-color: rgba(192, 98, 42, 0.07);
+  --hex-line-color2: rgba(192, 98, 42, 0.04);
+}
+
+/* ── Cascading Tile Reveal Theme (dark slate + glowing amber) ───── */
+[data-theme="dark"] {
+  --bg-cream: #0f1117;
+  --bg-warm: #181c27;
+  --text-primary: #f0ead8;
+  --text-secondary: #a89f88;
+  --text-muted: #5c5848;
+  --accent-primary: #f59e0b;
+  --accent-secondary: #fbbf24;
+  --accent-orange: #f59e0b;
+  --accent-pink: #fb7185;
+  --accent-green: #34d399;
+  --accent-purple: #f59e0b;
+  --accent-blue: #fbbf24;
+  --node-bg: #1e2130;
+  --node-border: #3a3520;
+  --node-text: #f0ead8;
+  /* glowing amber tile effect */
+  --node-shadow: 0 2px 8px rgba(245, 158, 11, 0.08), inset 0 1px 0 rgba(255, 220, 100, 0.06);
+  --node-active-border: #f59e0b;
+  --node-active-bg: rgba(245, 158, 11, 0.15);
+  --node-claimed-shadow: 0 0 12px rgba(245, 158, 11, 0.35), 0 2px 4px rgba(0,0,0,0.4);
+  --web-line: #2a2e40;
+  --web-line-active: #f59e0b;
+  --topbar-bg: #13161f;
+  --topbar-border: #2a2e40;
+  --sidebar-bg: #13161f;
+  --card-bg: #1a1e2c;
+  --progress-track: #2a2e40;
+  --progress-fill: #f59e0b;
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.3);
+  --shadow-medium: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-strong: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --hex-line-color: rgba(245, 158, 11, 0.06);
+  --hex-line-color2: rgba(245, 158, 11, 0.03);
 }
 
 html, body {
