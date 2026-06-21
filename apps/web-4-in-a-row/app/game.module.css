@@ -2,7 +2,6 @@
 .container {
   min-height: 100vh;
   min-height: 100dvh;
-  /* Layered background: dark overlay on top of image */
   background: 
     linear-gradient(rgba(15, 5, 24, 0.5), rgba(15, 5, 24, 0.5)),
     url('/image1.jpg') center/cover no-repeat fixed;
@@ -20,7 +19,6 @@
 /* Sidebar Styling */
 .sidebar {
   width: 220px;
-  /* Transparent glass effect */
   background: transparent;
   /* backdrop-filter: blur(10px); */
   display: flex;
